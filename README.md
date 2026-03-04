@@ -1,3 +1,5 @@
+![WindsurfPortable](./WindsurfPortable.png)
+
 Copyright (C) 2026 Cedric Nathaniel Keller. Licensed under the GPLv3.
 
 ## What this is
@@ -102,6 +104,6 @@ When installed via Velopack Setup, the installer creates a **Start Menu** shortc
 You can optionally enable/disable:
 
 - Desktop shortcut
-- Start with Windows (Startup folder)
+- Start Menu entry
 
 from Settings.

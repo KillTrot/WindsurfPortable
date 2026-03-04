@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Controls.Primitives;
+using Avalonia.Input;
 using System.ComponentModel;
 using WindsurfPortable.UI.ViewModels;
 
@@ -26,6 +27,14 @@ public partial class MainWindow : ShadUI.Window
         };
 
         await dialog.ShowDialog(this);
+    }
+
+    private void OnHeaderPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            BeginMoveDrag(e);
+        }
     }
 
     public void ConfigureCloseToTray(MainWindowViewModel vm, bool trayRequested, bool trayAvailable)

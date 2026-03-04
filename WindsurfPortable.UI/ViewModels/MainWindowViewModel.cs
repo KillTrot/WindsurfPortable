@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Formats.Tar;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Reactive;
@@ -26,8 +27,7 @@ public partial class MainWindowViewModel : ReactiveObject
 {
     private const string DefaultLauncherUpdateRepoUrl = "https://github.com/KillTrot/WindsurfPortable";
 
-    private const string WindsurfStableUpdateApiBase = "https://windsurf-stable.codeium.com/api/update/win32-x64-archive";
-    private const string WindsurfNextUpdateApiBase = "https://windsurf-next.codeium.com/api/update/win32-x64-archive";
+    public bool IsWindows => OperatingSystem.IsWindows();
 
     public ObservableCollection<string> Profiles { get; } = new();
 
@@ -133,25 +133,13 @@ public partial class MainWindowViewModel : ReactiveObject
         }
     }
 
-    private bool _enableLauncherDesktopShortcut;
-    public bool EnableLauncherDesktopShortcut
+    private bool _enableLauncherStartMenuShortcut;
+    public bool EnableLauncherStartMenuShortcut
     {
-        get => _enableLauncherDesktopShortcut;
+        get => _enableLauncherStartMenuShortcut;
         set
         {
-            this.RaiseAndSetIfChanged(ref _enableLauncherDesktopShortcut, value);
-            SaveSettings();
-            ApplyLauncherShortcuts();
-        }
-    }
-
-    private bool _enableLauncherStartupShortcut;
-    public bool EnableLauncherStartupShortcut
-    {
-        get => _enableLauncherStartupShortcut;
-        set
-        {
-            this.RaiseAndSetIfChanged(ref _enableLauncherStartupShortcut, value);
+            this.RaiseAndSetIfChanged(ref _enableLauncherStartMenuShortcut, value);
             SaveSettings();
             ApplyLauncherShortcuts();
         }
@@ -212,6 +200,7 @@ public partial class MainWindowViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> CheckLauncherUpdatesCommand { get; }
     public ReactiveCommand<Unit, Unit> ApplyLauncherUpdateCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenGitHubCommand { get; }
+    public ReactiveCommand<Unit, Unit> CreateDesktopShortcutCommand { get; }
 
     private UpdateManager? _updateManager;
     private string _pendingExtractPath = "";
@@ -355,6 +344,11 @@ public partial class MainWindowViewModel : ReactiveObject
             await ApplyLauncherUpdateAsync();
         });
 
+        CreateDesktopShortcutCommand = ReactiveCommand.Create(() =>
+        {
+            CreateDesktopShortcut();
+        });
+
         if (!IsWindsurfMissing)
         {
             InitializeUpdateChecker();
@@ -379,8 +373,11 @@ public partial class MainWindowViewModel : ReactiveObject
                     if (state.TryGetValue("auto_start_default_profile", out var asdp)) _autoStartDefaultProfile = asdp == "true";
                     if (state.TryGetValue("auto_hide_mode", out var ahm) && !string.IsNullOrWhiteSpace(ahm)) _autoHideMode = NormalizeAutoHideMode(ahm);
                     if (state.TryGetValue("launcher_update_repo_url", out var repo) && !string.IsNullOrWhiteSpace(repo)) _launcherUpdateRepoUrl = repo;
-                    if (state.TryGetValue("launcher_shortcut_desktop", out var lsd)) _enableLauncherDesktopShortcut = lsd == "true";
-                    if (state.TryGetValue("launcher_shortcut_startup", out var lss)) _enableLauncherStartupShortcut = lss == "true";
+
+                    if (state.TryGetValue("launcher_shortcut_start_menu", out var lssm))
+                        _enableLauncherStartMenuShortcut = lssm == "true";
+                    else if (state.TryGetValue("launcher_shortcut_startup", out var legacyStartup))
+                        _enableLauncherStartMenuShortcut = legacyStartup == "true";
                 }
             }
             catch { }
@@ -407,8 +404,7 @@ public partial class MainWindowViewModel : ReactiveObject
             state["auto_start_default_profile"] = AutoStartDefaultProfile ? "true" : "false";
             state["auto_hide_mode"] = AutoHideMode;
             state["launcher_update_repo_url"] = LauncherUpdateRepoUrl;
-            state["launcher_shortcut_desktop"] = EnableLauncherDesktopShortcut ? "true" : "false";
-            state["launcher_shortcut_startup"] = EnableLauncherStartupShortcut ? "true" : "false";
+            state["launcher_shortcut_start_menu"] = EnableLauncherStartMenuShortcut ? "true" : "false";
 
             File.WriteAllText(patchStateFile, System.Text.Json.JsonSerializer.Serialize(state, JsonContext.Default.DictionaryStringString));
         }
@@ -439,18 +435,30 @@ public partial class MainWindowViewModel : ReactiveObject
         {
             var shortcuts = new Shortcuts();
 
-            if (EnableLauncherDesktopShortcut)
-                shortcuts.CreateShortcutForThisExe(ShortcutLocation.Desktop);
+            if (EnableLauncherStartMenuShortcut)
+                shortcuts.CreateShortcutForThisExe(ShortcutLocation.StartMenuRoot);
             else
-                shortcuts.RemoveShortcutForThisExe(ShortcutLocation.Desktop);
-
-            if (EnableLauncherStartupShortcut)
-                shortcuts.CreateShortcutForThisExe(ShortcutLocation.Startup);
-            else
-                shortcuts.RemoveShortcutForThisExe(ShortcutLocation.Startup);
+                shortcuts.RemoveShortcutForThisExe(ShortcutLocation.StartMenuRoot);
         }
         catch
         {
+        }
+    }
+
+    private void CreateDesktopShortcut()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        try
+        {
+            var shortcuts = new Shortcuts();
+            shortcuts.CreateShortcutForThisExe(ShortcutLocation.Desktop);
+            StatusMessage = "Desktop shortcut created.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Failed to create desktop shortcut: {ex.Message}";
         }
     }
 
@@ -577,13 +585,11 @@ public partial class MainWindowViewModel : ReactiveObject
 
         try
         {
-            string updateApiBase = string.Equals(channel, "next", StringComparison.OrdinalIgnoreCase)
-                ? WindsurfNextUpdateApiBase
-                : WindsurfStableUpdateApiBase;
+            var updateChannel = string.Equals(channel, "next", StringComparison.OrdinalIgnoreCase)
+                ? WindsurfUpdateFeed.Channel.Next
+                : WindsurfUpdateFeed.Channel.Stable;
 
-            string apiUrl = string.Equals(channel, "next", StringComparison.OrdinalIgnoreCase)
-                ? $"{updateApiBase}/next/latest"
-                : $"{updateApiBase}/stable/latest";
+            string apiUrl = WindsurfUpdateFeed.GetLatestUpdateApiUrl(updateChannel, WindsurfUpdateFeed.PackageKind.Portable);
 
             using var httpClient = new HttpClient();
             var response = await httpClient.GetFromJsonAsync(apiUrl, InternalUpdateResponseContext.Default.InternalUpdateResponse);
@@ -595,12 +601,12 @@ public partial class MainWindowViewModel : ReactiveObject
             }
 
             StatusMessage = "Downloading Windsurf...";
-            string tempZipPath = Path.Combine(AppContext.BaseDirectory, "windsurf-initial.zip");
+            string tempPackagePath = Path.Combine(AppContext.BaseDirectory, GetInitialPackageFileName(response.Url));
 
             var downloadResponse = await httpClient.GetAsync(response.Url, HttpCompletionOption.ResponseHeadersRead);
             downloadResponse.EnsureSuccessStatusCode();
 
-            using (var fs = new FileStream(tempZipPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var fs = new FileStream(tempPackagePath, FileMode.Create, FileAccess.Write, FileShare.None))
             {
                 await downloadResponse.Content.CopyToAsync(fs);
             }
@@ -608,8 +614,8 @@ public partial class MainWindowViewModel : ReactiveObject
             StatusMessage = "Extracting Windsurf...";
             await System.Threading.Tasks.Task.Run(() =>
             {
-                ZipFile.ExtractToDirectory(tempZipPath, AppContext.BaseDirectory, overwriteFiles: true);
-                File.Delete(tempZipPath);
+                ExtractInitialPackage(tempPackagePath, AppContext.BaseDirectory);
+                File.Delete(tempPackagePath);
             });
 
             StatusMessage = "Download complete!";
@@ -625,6 +631,41 @@ public partial class MainWindowViewModel : ReactiveObject
         {
             IsBusy = false;
         }
+    }
+
+    private static string GetInitialPackageFileName(string downloadUrl)
+    {
+        try
+        {
+            var uri = new Uri(downloadUrl);
+            var name = Path.GetFileName(uri.LocalPath);
+            if (!string.IsNullOrWhiteSpace(name))
+                return name;
+        }
+        catch
+        {
+        }
+
+        return "windsurf-initial.pkg";
+    }
+
+    private static void ExtractInitialPackage(string packagePath, string destinationDir)
+    {
+        if (packagePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            ZipFile.ExtractToDirectory(packagePath, destinationDir, overwriteFiles: true);
+            return;
+        }
+
+        if (packagePath.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) || packagePath.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase))
+        {
+            using var fs = File.OpenRead(packagePath);
+            using var gz = new GZipStream(fs, CompressionMode.Decompress);
+            TarFile.ExtractToDirectory(gz, destinationDir, overwriteFiles: true);
+            return;
+        }
+
+        throw new NotSupportedException($"Unsupported Windsurf package format: {packagePath}");
     }
 
     private void InitializeUpdateChecker()

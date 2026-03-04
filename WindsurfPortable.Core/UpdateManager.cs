@@ -4,6 +4,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Formats.Tar;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -36,20 +37,15 @@ namespace WindsurfPortable
         private readonly string _updateUrl;
         private readonly string _stateFilePath;
 
-        private const string WindsurfStableUpdateApiBase = "https://windsurf-stable.codeium.com/api/update/win32-x64-archive";
-        private const string WindsurfNextUpdateApiBase = "https://windsurf-next.codeium.com/api/update/win32-x64-archive";
-
         public UpdateManager(string baseDir, string appDir, bool isNextBuild, string stateFilePath)
         {
             _baseDir = baseDir;
             _appDir = appDir;
             _isNextBuild = isNextBuild;
             _stateFilePath = stateFilePath;
-            
-            string updateApiBase = isNextBuild ? WindsurfNextUpdateApiBase : WindsurfStableUpdateApiBase;
-            _updateUrl = isNextBuild
-                ? $"{updateApiBase}/next/latest"
-                : $"{updateApiBase}/stable/latest";
+
+            var channel = isNextBuild ? WindsurfUpdateFeed.Channel.Next : WindsurfUpdateFeed.Channel.Stable;
+            _updateUrl = WindsurfUpdateFeed.GetLatestUpdateApiUrl(channel, WindsurfUpdateFeed.PackageKind.Portable);
         }
 
         // UpdateResponse class moved out to fix source generator error
@@ -147,14 +143,14 @@ namespace WindsurfPortable
 
         private async Task HandleUpdateAvailableAsync(string downloadUrl, string newVersion, HttpClient httpClient, CancellationToken cancellationToken)
         {
-            string tempZipPath = Path.Combine(_baseDir, "windsurf-update.zip");
+            string tempPackagePath = Path.Combine(_baseDir, GetUpdatePackageFileName(downloadUrl));
             string extractPath = Path.Combine(_baseDir, "windsurf-update-ready");
 
             // Download
             var response = await httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             response.EnsureSuccessStatusCode();
 
-            using (var fs = new FileStream(tempZipPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var fs = new FileStream(tempPackagePath, FileMode.Create, FileAccess.Write, FileShare.None))
             {
                 await response.Content.CopyToAsync(fs, cancellationToken);
             }
@@ -162,14 +158,49 @@ namespace WindsurfPortable
             // Extract
             if (Directory.Exists(extractPath))
                 Directory.Delete(extractPath, true);
-            
-            ZipFile.ExtractToDirectory(tempZipPath, extractPath, overwriteFiles: true);
+
+            ExtractUpdatePackage(tempPackagePath, extractPath);
 
             // Trigger UI Prompt via Event
             UpdateAvailable?.Invoke(newVersion, extractPath);
             
-            // Clean up zip
-            File.Delete(tempZipPath);
+            // Clean up downloaded package
+            File.Delete(tempPackagePath);
+        }
+
+        private static string GetUpdatePackageFileName(string downloadUrl)
+        {
+            try
+            {
+                var uri = new Uri(downloadUrl);
+                var name = Path.GetFileName(uri.LocalPath);
+                if (!string.IsNullOrWhiteSpace(name))
+                    return name;
+            }
+            catch
+            {
+            }
+
+            return "windsurf-update.pkg";
+        }
+
+        private static void ExtractUpdatePackage(string packagePath, string extractPath)
+        {
+            if (packagePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                ZipFile.ExtractToDirectory(packagePath, extractPath, overwriteFiles: true);
+                return;
+            }
+
+            if (packagePath.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) || packagePath.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase))
+            {
+                using var fs = File.OpenRead(packagePath);
+                using var gz = new GZipStream(fs, CompressionMode.Decompress);
+                TarFile.ExtractToDirectory(gz, extractPath, overwriteFiles: true);
+                return;
+            }
+
+            throw new NotSupportedException($"Unsupported Windsurf update package format: {packagePath}");
         }
 
         public void ApplyUpdateAndRestart(string extractPath, string baseDir)

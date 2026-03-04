@@ -8,6 +8,7 @@
         x:DataType="vm:MainWindowViewModel"
         Title="Settings"
         Width="560" Height="520"
+        MinWidth="560" MinHeight="520"
         WindowStartupLocation="CenterOwner"
         Icon="/Assets/WindsurfPortable.ico"
         Background="Transparent"
@@ -15,7 +16,7 @@
         TransparencyLevelHint="Mica, AcrylicBlur, Blur">
 
   <Grid RowDefinitions="Auto,Auto,*">
-    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="20,16,20,10" ColumnSpacing="12">
+    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="20,16,20,10" ColumnSpacing="12" PointerPressed="OnHeaderPointerPressed">
       <Image Grid.Column="0" Width="18" Height="18" Source="/Assets/WindsurfPortable.png" />
       <StackPanel Grid.Column="1" Spacing="0">
         <TextBlock Text="Settings" FontSize="18" FontWeight="SemiBold" />
@@ -65,7 +66,7 @@
           </StackPanel>
         </Border>
 
-        <TextBlock Text="Startup" FontWeight="SemiBold" FontSize="14" />
+        <TextBlock Text="General" FontWeight="SemiBold" FontSize="14" />
         <Border Classes="Card" Padding="20">
           <StackPanel>
             <Grid ColumnDefinitions="*,220" ColumnSpacing="16">
@@ -95,6 +96,25 @@
               </StackPanel>
               <CheckBox Grid.Column="1" VerticalAlignment="Center" IsChecked="{Binding AutoStartDefaultProfile}" />
             </Grid>
+
+            <Border Height="1" Background="{DynamicResource SystemControlForegroundChromeLowBrush}" Margin="0,12,0,12" IsVisible="{Binding IsWindows}" />
+
+            <StackPanel Spacing="12" IsVisible="{Binding IsWindows}">
+              <StackPanel Spacing="2">
+                <TextBlock Text="Shortcuts" FontWeight="SemiBold" />
+                <TextBlock Text="Applies to the launcher itself." TextWrapping="Wrap" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" FontSize="12" />
+              </StackPanel>
+
+              <Button Content="Create shortcut on desktop" Classes="Secondary" Command="{Binding CreateDesktopShortcutCommand}" />
+
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                <StackPanel Grid.Column="0" Spacing="2">
+                  <TextBlock Text="Start Menu entry" FontWeight="SemiBold" />
+                  <TextBlock Text="Show the launcher in the Start Menu." TextWrapping="Wrap" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" FontSize="12" />
+                </StackPanel>
+                <CheckBox Grid.Column="1" VerticalAlignment="Center" IsChecked="{Binding EnableLauncherStartMenuShortcut}" />
+              </Grid>
+            </StackPanel>
           </StackPanel>
         </Border>
 
@@ -120,25 +140,6 @@
             </StackPanel>
 
             <Border Height="1" Background="{DynamicResource SystemControlForegroundChromeLowBrush}" Margin="0,12,0,12" />
-
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
-              <StackPanel Grid.Column="0" Spacing="2">
-                <TextBlock Text="Desktop shortcut" FontWeight="SemiBold" />
-                <TextBlock Text="Create a desktop shortcut for the launcher." TextWrapping="Wrap" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" FontSize="12" />
-              </StackPanel>
-              <CheckBox Grid.Column="1" VerticalAlignment="Center" IsChecked="{Binding EnableLauncherDesktopShortcut}" />
-            </Grid>
-
-            <Border Height="1" Background="{DynamicResource SystemControlForegroundChromeLowBrush}" Margin="0,12,0,12" />
-
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
-              <StackPanel Grid.Column="0" Spacing="2">
-                <TextBlock Text="Start with Windows" FontWeight="SemiBold" />
-                <TextBlock Text="Add the launcher to the Startup folder." TextWrapping="Wrap" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" FontSize="12" />
-              </StackPanel>
-              <CheckBox Grid.Column="1" VerticalAlignment="Center" IsChecked="{Binding EnableLauncherStartupShortcut}" />
-            </Grid>
-
             <TextBlock Margin="0,12,0,0" Text="{Binding LauncherUpdateMessage}" TextWrapping="Wrap" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
           </StackPanel>
         </Border>
