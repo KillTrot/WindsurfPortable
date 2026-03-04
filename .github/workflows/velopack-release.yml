@@ -13,20 +13,15 @@ permissions:
   contents: write
 
 jobs:
-  build_release:
-    runs-on: windows-latest
-
+  version_guard:
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.version-guard.outputs.should_release }}
+      version: ${{ steps.get-version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 10.0.x
-
-      - name: Restore
-        run: dotnet restore
 
       - name: Get Version from Project File
         id: get-version
@@ -55,28 +50,310 @@ jobs:
             echo "Latest tag version: $latest_ver; csproj version: $new_ver; will release."
           fi
 
+  build_pack:
+    needs: version_guard
+    if: needs.version_guard.outputs.should_release == 'true'
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows (win-x64)
+            os: ubuntu-latest
+            rid: win-x64
+            runtime: win-x64
+            mainExe: WindsurfPortable.exe
+            vpkOs: win
+            iconMode: ico
+
+          - name: Windows (win-arm64)
+            os: ubuntu-latest
+            rid: win-arm64
+            runtime: win-arm64
+            mainExe: WindsurfPortable.exe
+            vpkOs: win
+            iconMode: ico
+
+          - name: Linux (linux-x64)
+            os: ubuntu-latest
+            rid: linux-x64
+            runtime: linux-x64
+            mainExe: WindsurfPortable
+            vpkOs: linux
+            iconMode: png
+
+          - name: Linux (linux-x64-deb)
+            os: ubuntu-latest
+            rid: linux-x64
+            runtime: linux-x64
+            mainExe: WindsurfPortable
+            vpkOs: linux
+            iconMode: png
+            linuxDeb: true
+
+          - name: macOS (osx-x64)
+            os: macos-14
+            rid: osx-x64
+            runtime: osx-x64
+            mainExe: WindsurfPortable
+            vpkOs: osx
+            iconMode: icns
+
+          - name: macOS (osx-arm64)
+            os: macos-latest
+            rid: osx-arm64
+            runtime: osx-arm64
+            mainExe: WindsurfPortable
+            vpkOs: osx
+            iconMode: icns
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Add dotnet tools to PATH
+        shell: bash
+        run: |
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+          if [ -n "${USERPROFILE:-}" ]; then
+            echo "$USERPROFILE/.dotnet/tools" >> "$GITHUB_PATH"
+          fi
+
+      - name: Install/Update vpk
+        shell: bash
+        run: dotnet tool update -g vpk
+
+      - name: Install Linux dependencies
+        if: startsWith(matrix.os, 'ubuntu-')
+        shell: bash
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y squashfs-tools
+          sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64
+
+      - name: Install ImageMagick
+        if: matrix.iconMode == 'ico' && startsWith(matrix.os, 'ubuntu-')
+        shell: bash
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
+
       - name: Publish
-        if: steps.version-guard.outputs.should_release == 'true'
-        run: dotnet publish WindsurfPortable.UI/WindsurfPortable.UI.csproj -c Release -o publish -r win-x64 --self-contained true
+        shell: bash
+        run: |
+          dotnet publish WindsurfPortable.UI/WindsurfPortable.UI.csproj \
+            -c Release \
+            -r "${{ matrix.rid }}" \
+            --self-contained true \
+            -p:RuntimeIdentifiers="${{ matrix.rid }}" \
+            -o "publish/${{ matrix.rid }}"
 
-      - name: Install Velopack Tool
-        if: steps.version-guard.outputs.should_release == 'true'
-        run: dotnet tool install -g vpk
+      - name: Generate macOS .icns
+        if: matrix.iconMode == 'icns'
+        shell: bash
+        run: |
+          set -e
+          mkdir -p artifacts/icon.iconset
+          src_png="WindsurfPortable.png"
+          sips -z 16 16 "$src_png" --out artifacts/icon.iconset/icon_16x16.png
+          sips -z 32 32 "$src_png" --out artifacts/icon.iconset/icon_16x16@2x.png
+          sips -z 32 32 "$src_png" --out artifacts/icon.iconset/icon_32x32.png
+          sips -z 64 64 "$src_png" --out artifacts/icon.iconset/icon_32x32@2x.png
+          sips -z 128 128 "$src_png" --out artifacts/icon.iconset/icon_128x128.png
+          sips -z 256 256 "$src_png" --out artifacts/icon.iconset/icon_128x128@2x.png
+          sips -z 256 256 "$src_png" --out artifacts/icon.iconset/icon_256x256.png
+          sips -z 512 512 "$src_png" --out artifacts/icon.iconset/icon_256x256@2x.png
+          sips -z 512 512 "$src_png" --out artifacts/icon.iconset/icon_512x512.png
+          sips -z 1024 1024 "$src_png" --out artifacts/icon.iconset/icon_512x512@2x.png
+          iconutil -c icns artifacts/icon.iconset -o artifacts/icon.icns
 
-      - name: Add .NET tools to PATH
-        if: steps.version-guard.outputs.should_release == 'true'
-        shell: pwsh
-        run: echo "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Generate Windows .ico
+        if: matrix.iconMode == 'ico'
+        shell: bash
+        run: |
+          set -e
+          mkdir -p artifacts
+          if command -v magick >/dev/null 2>&1; then
+            magick WindsurfPortable.UI/Assets/WindsurfPortable.ico artifacts/icon.ico
+          else
+            cp WindsurfPortable.UI/Assets/WindsurfPortable.ico artifacts/icon.ico
+          fi
+
+      - name: Velopack pack
+        if: matrix.linuxDeb != true
+        shell: bash
+        run: |
+          set -e
+
+          icon_arg=""
+          if [ "${{ matrix.iconMode }}" = "png" ]; then
+            icon_arg="--icon WindsurfPortable.png"
+          elif [ "${{ matrix.iconMode }}" = "ico" ]; then
+            icon_arg="--icon WindsurfPortable.UI/Assets/WindsurfPortable.ico"
+          elif [ "${{ matrix.iconMode }}" = "icns" ]; then
+            icon_arg="--icon artifacts/icon.icns"
+          fi
+
+          mkdir -p "Releases/${{ matrix.name }}"
+
+          if [ "${{ matrix.vpkOs }}" = "win" ] && [ "${{ runner.os }}" != "Windows" ]; then
+            vpk '[win]' pack \
+              --packId WindsurfPortable \
+              --packVersion "${{ needs.version_guard.outputs.version }}" \
+              --packDir "publish/${{ matrix.rid }}" \
+              --mainExe "${{ matrix.mainExe }}" \
+              --runtime "${{ matrix.runtime }}" \
+              --outputDir "Releases/${{ matrix.rid }}" \
+              --packTitle "WindsurfPortable" \
+              --packAuthors "KillTrot" \
+              --shortcuts StartMenuRoot \
+              $icon_arg
+            exit 0
+          fi
+
+          vpk pack \
+            --packId WindsurfPortable \
+            --packVersion "${{ needs.version_guard.outputs.version }}" \
+            --packDir "publish/${{ matrix.rid }}" \
+            --mainExe "${{ matrix.mainExe }}" \
+            --runtime "${{ matrix.runtime }}" \
+            --outputDir "Releases/${{ matrix.rid }}" \
+            --packTitle "WindsurfPortable" \
+            --packAuthors "KillTrot" \
+            --shortcuts StartMenuRoot \
+            $icon_arg
+
+      - name: Build Linux .deb
+        if: matrix.linuxDeb == true
+        shell: bash
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev
+
+          ver="${{ needs.version_guard.outputs.version }}"
+          pkgdir="debroot"
+          rm -rf "$pkgdir"
+          mkdir -p "$pkgdir/DEBIAN" "$pkgdir/opt/WindsurfPortable" "$pkgdir/usr/bin" "$pkgdir/usr/share/applications" "$pkgdir/usr/share/pixmaps"
+
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          pkgdir = Path(os.environ['PKGDIR'])
+          ver = os.environ['VER']
+
+          (pkgdir / 'DEBIAN' / 'control').write_text(
+              "\n".join([
+                  "Package: windsurfportable",
+                  f"Version: {ver}",
+                  "Section: utils",
+                  "Priority: optional",
+                  "Architecture: amd64",
+                  "Maintainer: KillTrot",
+                  "Description: WindsurfPortable launcher",
+                  "",
+              ]),
+              encoding='utf-8'
+          )
+
+          (pkgdir / 'usr' / 'bin' / 'windsurfportable').write_text(
+              "#!/bin/sh\nexec /opt/WindsurfPortable/WindsurfPortable \"$@\"\n",
+              encoding='utf-8'
+          )
+
+          (pkgdir / 'usr' / 'share' / 'applications' / 'windsurfportable.desktop').write_text(
+              "\n".join([
+                  "[Desktop Entry]",
+                  "Type=Application",
+                  "Name=WindsurfPortable",
+                  "Exec=/usr/bin/windsurfportable",
+                  "Icon=windsurfportable",
+                  "Terminal=false",
+                  "Categories=Development;",
+                  "",
+              ]),
+              encoding='utf-8'
+          )
+          PY
+        env:
+          VER: ${{ needs.version_guard.outputs.version }}
+          PKGDIR: debroot
+
+      - name: Populate Linux .deb payload
+        if: matrix.linuxDeb == true
+        shell: bash
+        run: |
+          set -e
+          pkgdir="debroot"
+          cp -r "publish/${{ matrix.rid }}/." "$pkgdir/opt/WindsurfPortable/"
+          chmod +x "$pkgdir/usr/bin/windsurfportable"
+          cp WindsurfPortable.png "$pkgdir/usr/share/pixmaps/windsurfportable.png"
+
+          mkdir -p Releases/linux-x64-deb
+          dpkg-deb --build "$pkgdir" "Releases/linux-x64-deb/windsurfportable_${{ needs.version_guard.outputs.version }}_amd64.deb"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: releases-${{ matrix.rid }}${{ matrix.linuxDeb && '-deb' || '' }}
+          path: Releases/
+
+  upload_release:
+    needs: [version_guard, build_pack]
+    if: needs.version_guard.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Add dotnet tools to PATH
+        shell: bash
+        run: echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Install/Update vpk
+        shell: bash
+        run: dotnet tool update -g vpk
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Merge Releases
+        shell: bash
+        run: |
+          set -e
+          mkdir -p Releases
+
+          find artifacts -type d -name Releases -print0 | while IFS= read -r -d '' d; do
+            rsync -a "$d/" Releases/
+          done
 
       - name: Download Latest Release (for delta support)
-        if: steps.version-guard.outputs.should_release == 'true'
         continue-on-error: true
+        shell: bash
         run: vpk download github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Pack
-        if: steps.version-guard.outputs.should_release == 'true'
-        run: vpk pack --packId WindsurfPortable --packVersion ${{ steps.get-version.outputs.version }} --packDir publish --mainExe WindsurfPortable.exe --packTitle "WindsurfPortable" --packAuthors "KillTrot" --shortcuts StartMenuRoot
+      - name: Upload GitHub Release (Velopack)
+        shell: bash
+        run: vpk upload github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "WindsurfPortable ${{ needs.version_guard.outputs.version }}" --tag v${{ needs.version_guard.outputs.version }}
 
-      - name: Upload GitHub Release
-        if: steps.version-guard.outputs.should_release == 'true'
-        run: vpk upload github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "WindsurfPortable ${{ steps.get-version.outputs.version }}" --tag v${{ steps.get-version.outputs.version }}
+      - name: Upload Linux .deb to GitHub Release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          if ls Releases/*.deb >/dev/null 2>&1; then
+            gh release upload "v${{ needs.version_guard.outputs.version }}" Releases/*.deb --clobber
+          fi
