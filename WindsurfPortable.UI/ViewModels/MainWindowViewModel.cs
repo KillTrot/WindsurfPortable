@@ -215,7 +215,7 @@ public partial class MainWindowViewModel : ReactiveObject
                 Process? proc = null;
                 await System.Threading.Tasks.Task.Run(() =>
                 {
-                    var options = new LegacyConsoleProgram.LauncherOptions(
+                    var options = new Launcher.LauncherOptions(
                         AppContext.BaseDirectory,
                         SelectedProfile,
                         Array.Empty<string>(),
@@ -224,7 +224,7 @@ public partial class MainWindowViewModel : ReactiveObject
                         EnableGlobalRecentsPatch
                     );
 
-                    proc = LegacyConsoleProgram.Launch(options, waitForExit: false);
+                    proc = Launcher.Launch(options, waitForExit: false);
                 });
 
                 if (proc == null)
@@ -371,7 +371,21 @@ public partial class MainWindowViewModel : ReactiveObject
 
         try
         {
-            return new Velopack.UpdateManager(new GithubSource(LauncherUpdateRepoUrl.Trim(), string.Empty, prerelease: false));
+            // Extract owner/repo from full GitHub URL if provided
+            string repoUrl = LauncherUpdateRepoUrl.Trim();
+            if (repoUrl.StartsWith("https://github.com/", StringComparison.OrdinalIgnoreCase))
+            {
+                var uri = new Uri(repoUrl);
+                var path = uri.AbsolutePath.Trim('/');
+                // Remove .git suffix if present
+                if (path.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+                {
+                    path = path.Substring(0, path.Length - 4);
+                }
+                repoUrl = path;
+            }
+
+            return new Velopack.UpdateManager(new GithubSource(repoUrl, string.Empty, prerelease: false));
         }
         catch
         {

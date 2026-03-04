@@ -52,7 +52,7 @@ namespace WindsurfPortable
     ///   calls WindsurfPortable.exe instead of Windsurf.exe, preserving the active profile
     ///   across updates without any user action.
     /// </summary>
-    public class LegacyConsoleProgram
+    public class Launcher
     {
         // ── Paths (all relative to the directory containing this exe) ────────────
 
@@ -302,6 +302,12 @@ namespace WindsurfPortable
 
         public static int Run(LauncherOptions options)
         {
+            var proc = Launch(options, waitForExit: true);
+            return proc?.ExitCode ?? 1;
+        }
+
+        public static Process? Launch(LauncherOptions options, bool waitForExit)
+        {
             string baseDir = options.BaseDir;
             baseDir = Path.GetFullPath(baseDir);
             string profile = options.Profile;
@@ -313,7 +319,7 @@ namespace WindsurfPortable
             {
                 Error("Could not find Windsurf.exe or \"Windsurf - Next.exe\" next to this launcher.");
                 Error("Drop WindsurfPortable.exe into the extracted Windsurf zip folder.");
-                return 1;
+                return null;
             }
 
             AnsiConsole.Write(new Rule("WindsurfPortable").LeftJustified().RuleStyle("grey"));
@@ -357,11 +363,11 @@ namespace WindsurfPortable
                 if (!File.Exists(asarFile))
                 {
                     Error($"Neither resources/app/ nor resources/app.asar found in: {baseDir}");
-                    return 1;
+                    return null;
                 }
                 Info("Unpacking app.asar (first run)...");
                 if (!UnpackAsar(asarFile, appDir))
-                    return 1;
+                    return null;
             }
 
 
@@ -521,7 +527,7 @@ namespace WindsurfPortable
                     {
                         Error("Required profile-isolation patches are missing in this Windsurf build. Launch aborted to prevent cross-profile state sharing.");
                         Error("Please update patch patterns for this client version and rerun.");
-                        return 1;
+                        return null;
                     }
                 }
 
@@ -577,9 +583,16 @@ namespace WindsurfPortable
             Info($"--extensions-dir      = {profileExtensionsDir}");
             Info("Launching...");
 
-            var proc = Process.Start(psi)!;
-            proc.WaitForExit();
-            return proc.ExitCode;
+            var proc = Process.Start(psi);
+            if (proc == null)
+                return null;
+
+            if (waitForExit)
+            {
+                proc.WaitForExit();
+            }
+
+            return proc;
         }
 
         // ── ASAR unpacking ────────────────────────────────────────────────────────

@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main
+    paths:
+      - '.github/workflows/velopack-release.yml'
+      - 'WindsurfPortable.UI/**'
+      - 'WindsurfPortable.Core/**'
 
 permissions:
   contents: write
@@ -14,6 +18,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -27,22 +33,50 @@ jobs:
         shell: bash
         run: echo "version=$(grep -oE '<Version>[^<]+' WindsurfPortable.UI/WindsurfPortable.UI.csproj | sed 's/<Version>//')" >> $GITHUB_OUTPUT
 
+      - name: Check version increased
+        id: version-guard
+        shell: bash
+        run: |
+          git fetch --tags --force
+          latest_tag=$(git tag -l 'v*' --sort=-v:refname | head -n 1)
+          latest_ver=${latest_tag#v}
+          if [ -z "$latest_ver" ] || [ "$latest_ver" = "$latest_tag" ]; then
+            latest_ver="0.0.0"
+          fi
+
+          new_ver="${{ steps.get-version.outputs.version }}"
+          highest=$(printf "%s\n%s\n" "$latest_ver" "$new_ver" | sort -V | tail -n 1)
+
+          if [ "$highest" != "$new_ver" ] || [ "$latest_ver" = "$new_ver" ]; then
+            echo "should_release=false" >> $GITHUB_OUTPUT
+            echo "Latest tag version: $latest_ver; csproj version: $new_ver; skipping release."
+          else
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "Latest tag version: $latest_ver; csproj version: $new_ver; will release."
+          fi
+
       - name: Publish
+        if: steps.version-guard.outputs.should_release == 'true'
         run: dotnet publish WindsurfPortable.UI/WindsurfPortable.UI.csproj -c Release -o publish -r win-x64 --self-contained true
 
       - name: Install Velopack Tool
+        if: steps.version-guard.outputs.should_release == 'true'
         run: dotnet tool install -g vpk
 
       - name: Add .NET tools to PATH
+        if: steps.version-guard.outputs.should_release == 'true'
         shell: pwsh
         run: echo "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Download Latest Release (for delta support)
+        if: steps.version-guard.outputs.should_release == 'true'
         continue-on-error: true
         run: vpk download github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pack
+        if: steps.version-guard.outputs.should_release == 'true'
         run: vpk pack --packId WindsurfPortable --packVersion ${{ steps.get-version.outputs.version }} --packDir publish --mainExe WindsurfPortable.exe
 
       - name: Upload GitHub Release
+        if: steps.version-guard.outputs.should_release == 'true'
         run: vpk upload github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "WindsurfPortable ${{ steps.get-version.outputs.version }}" --tag v${{ steps.get-version.outputs.version }}
