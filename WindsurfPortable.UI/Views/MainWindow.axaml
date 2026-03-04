@@ -69,33 +69,25 @@
             </StackPanel>
         </Grid>
 
-        <Border Grid.RowSpan="3" ZIndex="15" HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Margin="5,0,5,5" Background="Transparent"
+        <Border Grid.RowSpan="3" ZIndex="15" HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Margin="20" Background="Transparent"
                 IsVisible="{Binding IsUpdateOverlayVisible}">
-            <Border Classes="Card" Background="WhiteSmoke" Padding="14" CornerRadius="12" BoxShadow="0 6 16 0 #40000000">
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" VerticalAlignment="Center">
-                    <TextBlock Grid.Column="0" Text="{Binding UpdateOverlayMessage}" VerticalAlignment="Center" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="#111827" />
+            <Border Background="#E609090B" BorderBrush="#27272A" BorderThickness="1" Padding="16" CornerRadius="8" BoxShadow="0 4 6 -1 #A6000000, 0 2 4 -2 #A6000000">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16" VerticalAlignment="Center">
+                    <TextBlock Grid.Column="0" Text="{Binding UpdateOverlayMessage}" VerticalAlignment="Center" FontWeight="Medium" TextWrapping="Wrap" Foreground="#FAFAFA" />
 
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                        <Button Content="Dismiss" Command="{Binding DismissUpdateOverlayCommand}" Classes="Secondary" Foreground="#111827" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Button Content="Dismiss" Command="{Binding DismissUpdateOverlayCommand}" Classes="Ghost" Foreground="#A1A1AA" />
 
-                        <Button Content="Restart" Command="{Binding RestartToApplyLauncherUpdateCommand}" Classes="Primary"
-                                IsVisible="{Binding ShowLauncherRestartButton}" Background="#111827" Foreground="White" />
+                        <Button Content="Restart" Command="{Binding RestartToApplyLauncherUpdateCommand}"
+                                IsVisible="{Binding ShowLauncherRestartButton}" Background="#FAFAFA" Foreground="#09090B" FontWeight="Medium" CornerRadius="6" />
 
-                        <Button Command="{Binding ApplyUpdateCommand}" Classes="Primary"
-                                IsVisible="{Binding ShowWindsurfUpdateButtons}" Background="#111827" Foreground="White">
-                            <Button.Styles>
-                                <Style Selector="TextBlock#UpdateRestartText">
-                                    <Setter Property="Foreground" Value="White" />
-                                </Style>
-                                <Style Selector="Button:pointerover TextBlock#UpdateRestartText">
-                                    <Setter Property="Foreground" Value="Black" />
-                                </Style>
-                            </Button.Styles>
-                            <TextBlock Name="UpdateRestartText" Text="Update &amp; Restart" />
+                        <Button Command="{Binding ApplyUpdateCommand}"
+                                IsVisible="{Binding ShowWindsurfUpdateButtons}" Background="#FAFAFA" Foreground="#09090B" FontWeight="Medium" CornerRadius="6">
+                            <TextBlock Text="Update &amp; Restart" />
                         </Button>
 
-                        <Button Content="Skip" Command="{Binding SkipUpdateCommand}" Classes="Secondary"
-                                IsVisible="{Binding ShowWindsurfUpdateButtons}" Foreground="#111827" />
+                        <Button Content="Skip" Command="{Binding SkipUpdateCommand}" Classes="Ghost"
+                                IsVisible="{Binding ShowWindsurfUpdateButtons}" Foreground="#A1A1AA" />
                     </StackPanel>
                 </Grid>
             </Border>
@@ -103,16 +95,20 @@
 
         <shadui:DialogHost Manager="{Binding DialogManager}" Grid.RowSpan="3" ZIndex="18" />
 
-        <Border Grid.RowSpan="3" IsVisible="{Binding IsBusy}" ZIndex="20" Background="Black" Opacity="0.35" Margin="-20">
-            <Border Classes="Card" HorizontalAlignment="Center" VerticalAlignment="Center" Width="360" Padding="20">
-                <StackPanel Spacing="12">
-                    <TextBlock Text="Working…" FontWeight="SemiBold" FontSize="16" />
-                    <Border Height="1" Background="{DynamicResource SystemControlForegroundChromeLowBrush}" />
-                    <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" FontSize="12" />
-                    <ProgressBar IsIndeterminate="True" Classes="Primary" Height="6" Margin="0,6,0,0" />
+        <Panel Grid.RowSpan="3" IsVisible="{Binding IsBusy}" ZIndex="20" Margin="-20">
+            <!-- Background darkener/blur -->
+            <Border Background="#A6000000" />
+            
+            <!-- The Card -->
+            <Border Background="#E609090B" BorderBrush="#27272A" BorderThickness="1" CornerRadius="8" BoxShadow="0 4 6 -1 #A6000000, 0 2 4 -2 #A6000000"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" Width="360" Padding="24">
+                <StackPanel Spacing="16">
+                    <TextBlock Text="Working…" FontWeight="SemiBold" FontSize="18" Foreground="#FAFAFA" />
+                    <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="#A1A1AA" FontSize="14" />
+                    <ProgressBar IsIndeterminate="True" Height="6" CornerRadius="3" Foreground="#FAFAFA" Background="#27272A" Margin="0,4,0,0" />
                 </StackPanel>
             </Border>
-        </Border>
+        </Panel>
     </Grid>
 
 </Window>

@@ -10,8 +10,10 @@ public static class UpdateApplier
         if (string.IsNullOrWhiteSpace(extractPath) || !Directory.Exists(extractPath))
             throw new DirectoryNotFoundException($"Update extract path not found: {extractPath}");
 
-        if (string.IsNullOrWhiteSpace(baseDir) || !Directory.Exists(baseDir))
+        if (string.IsNullOrWhiteSpace(baseDir))
             throw new DirectoryNotFoundException($"Base directory not found: {baseDir}");
+
+        Directory.CreateDirectory(baseDir);
 
         CopyDirectory(extractPath, baseDir, Environment.ProcessPath);
 

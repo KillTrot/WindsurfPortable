@@ -307,6 +307,7 @@ public partial class MainWindowViewModel : ReactiveObject
                 {
                     var options = new Launcher.LauncherOptions(
                         AppContext.BaseDirectory,
+                        null,
                         SelectedProfile,
                         Array.Empty<string>(),
                         EnableSingleInstancePatch,
@@ -579,7 +580,7 @@ public partial class MainWindowViewModel : ReactiveObject
 
     private void LoadSettings()
     {
-        string patchStateFile = Path.Combine(AppContext.BaseDirectory, "resources", ".portable_patch_state.json");
+        string patchStateFile = Path.Combine(AppContext.BaseDirectory, "windsurf", "resources", ".portable_patch_state.json");
         if (File.Exists(patchStateFile))
         {
             try
@@ -609,7 +610,7 @@ public partial class MainWindowViewModel : ReactiveObject
 
     private void SaveSettings()
     {
-        string patchStateFile = Path.Combine(AppContext.BaseDirectory, "resources", ".portable_patch_state.json");
+        string patchStateFile = Path.Combine(AppContext.BaseDirectory, "windsurf", "resources", ".portable_patch_state.json");
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(patchStateFile)!);
@@ -870,8 +871,9 @@ public partial class MainWindowViewModel : ReactiveObject
     private void CheckIfWindsurfMissing()
     {
         string baseDir = AppContext.BaseDirectory;
-        IsWindsurfMissing = !File.Exists(Path.Combine(baseDir, "Windsurf.exe")) &&
-                            !File.Exists(Path.Combine(baseDir, "Windsurf - Next.exe"));
+        string windsurfDir = Path.Combine(baseDir, "windsurf");
+        IsWindsurfMissing = !File.Exists(Path.Combine(windsurfDir, "Windsurf.exe")) &&
+                            !File.Exists(Path.Combine(windsurfDir, "Windsurf - Next.exe"));
     }
 
     internal class InternalUpdateResponse
@@ -919,7 +921,9 @@ public partial class MainWindowViewModel : ReactiveObject
             StatusMessage = "Extracting Windsurf...";
             await System.Threading.Tasks.Task.Run(() =>
             {
-                ExtractInitialPackage(tempPackagePath, AppContext.BaseDirectory);
+                var windsurfDir = Path.Combine(AppContext.BaseDirectory, "windsurf");
+                Directory.CreateDirectory(windsurfDir);
+                ExtractInitialPackage(tempPackagePath, windsurfDir);
                 File.Delete(tempPackagePath);
             });
 
@@ -976,8 +980,9 @@ public partial class MainWindowViewModel : ReactiveObject
     private void InitializeUpdateChecker()
     {
         string baseDir = AppContext.BaseDirectory;
-        string appDir = Path.Combine(baseDir, "resources", "app");
-        string patchStateFile = Path.Combine(baseDir, "resources", ".portable_patch_state.json");
+        string windsurfDir = Path.Combine(baseDir, "windsurf");
+        string appDir = Path.Combine(windsurfDir, "resources", "app");
+        string patchStateFile = Path.Combine(windsurfDir, "resources", ".portable_patch_state.json");
 
         bool isNextBuild = IsNextBuildFromStateOrApp(appDir, patchStateFile);
 
@@ -1047,7 +1052,7 @@ public partial class MainWindowViewModel : ReactiveObject
 
     private void SaveInstalledWindsurfChannel(string channel)
     {
-        string patchStateFile = Path.Combine(AppContext.BaseDirectory, "resources", ".portable_patch_state.json");
+        string patchStateFile = Path.Combine(AppContext.BaseDirectory, "windsurf", "resources", ".portable_patch_state.json");
 
         try
         {

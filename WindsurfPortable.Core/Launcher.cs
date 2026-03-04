@@ -56,6 +56,7 @@ namespace WindsurfPortable
     {
         // ── Paths (all relative to the directory containing this exe) ────────────
 
+        const string WindsurfInstallSubdir = "windsurf";
         const string VscodeDataDir = "vscode-data";
         const string VscodeUserDataSubdir = "data";
         const string VscodeExtensionsSubdir = "extensions";
@@ -79,8 +80,9 @@ namespace WindsurfPortable
         ];
 
         public sealed record LauncherOptions(
-            string BaseDir, 
-            string Profile, 
+            string BaseDir,
+            string? WindsurfDirOverride,
+            string Profile,
             string[] ForwardArgs,
             bool EnableSingleInstancePatch = true,
             bool EnableMcpSyncIsolation = true,
@@ -290,8 +292,9 @@ namespace WindsurfPortable
             string[] forwardArgs = parseResult.UnmatchedTokens.ToArray();
 
             var options = new LauncherOptions(
-                string.IsNullOrWhiteSpace(windsurfDir)
-                    ? AppContext.BaseDirectory
+                BaseDir: AppContext.BaseDirectory,
+                WindsurfDirOverride: string.IsNullOrWhiteSpace(windsurfDir)
+                    ? null
                     : windsurfDir.Trim(),
                 profile,
                 forwardArgs
@@ -308,29 +311,32 @@ namespace WindsurfPortable
 
         public static Process? Launch(LauncherOptions options, bool waitForExit)
         {
-            string baseDir = options.BaseDir;
-            baseDir = Path.GetFullPath(baseDir);
+            string launcherDir = Path.GetFullPath(options.BaseDir);
+            string windsurfDir = Path.GetFullPath(
+                options.WindsurfDirOverride ?? Path.Combine(launcherDir, WindsurfInstallSubdir));
             string profile = options.Profile;
             string profileIpcSuffix = ToIpcSafeProfileId(profile);
 
             // Detect which exe Windsurf itself is (supports both stable and Next)
-            string? windsurfExe = FindWindsurfExe(baseDir);
+            string? windsurfExe = FindWindsurfExe(windsurfDir);
             if (windsurfExe is null)
             {
-                Error("Could not find Windsurf.exe or \"Windsurf - Next.exe\" next to this launcher.");
-                Error("Drop WindsurfPortable.exe into the extracted Windsurf zip folder.");
+                Error("Could not find Windsurf.exe or \"Windsurf - Next.exe\" in the expected install directory.");
+                Error($"Expected: {windsurfDir}");
+                Error($"By default, Windsurf should be installed in: {Path.Combine(launcherDir, WindsurfInstallSubdir)}");
                 return null;
             }
 
             AnsiConsole.Write(new Rule("WindsurfPortable").LeftJustified().RuleStyle("grey"));
             Info($"Windsurf : {Path.GetFileName(windsurfExe)}");
             Info($"Profile  : {profile}");
-            Info($"Base dir : {baseDir}");
+            Info($"Launcher : {launcherDir}");
+            Info($"Windsurf : {windsurfDir}");
 
             // ── First-run setup ───────────────────────────────────────────────────
 
             // 1. Create profile-specific dirs
-            string profileRoot = EnsureDir(Path.Combine(baseDir, ProfilesDir, profile));
+            string profileRoot = EnsureDir(Path.Combine(launcherDir, ProfilesDir, profile));
             string vscodeDataRoot = EnsureDir(Path.Combine(profileRoot, VscodeDataDir));
             string profileUserDataDir = EnsureDir(Path.Combine(vscodeDataRoot, VscodeUserDataSubdir));
             string profileExtensionsDir = EnsureDir(Path.Combine(vscodeDataRoot, VscodeExtensionsSubdir));
@@ -354,15 +360,15 @@ namespace WindsurfPortable
             string codeiumSegments = $".codeium/{codeiumBaseSegment}";
 
             // 3. Unpack app.asar if resources\app\ doesn't exist yet
-            string appDir = Path.Combine(baseDir, AppDirPath);
-            string asarFile = Path.Combine(baseDir, AppAsarPath);
+            string appDir = Path.Combine(windsurfDir, AppDirPath);
+            string asarFile = Path.Combine(windsurfDir, AppAsarPath);
             bool needUnpack = !Directory.Exists(appDir) || !Directory.EnumerateFiles(appDir).Any();
 
             if (needUnpack)
             {
                 if (!File.Exists(asarFile))
                 {
-                    Error($"Neither resources/app/ nor resources/app.asar found in: {baseDir}");
+                    Error($"Neither resources/app/ nor resources/app.asar found in: {windsurfDir}");
                     return null;
                 }
                 Info("Unpacking app.asar (first run)...");
@@ -372,7 +378,7 @@ namespace WindsurfPortable
 
 
             // ── Patch detection & application ─────────────────────────────────────
-            string patchStateFile = Path.Combine(baseDir, PatchStatePath);
+            string patchStateFile = Path.Combine(windsurfDir, PatchStatePath);
             var patchState = LoadPatchState(patchStateFile);
             bool hasStoredPatchVersion = patchState.TryGetValue("__patch_version", out var stateVersion);
             bool patchVersionChanged = hasStoredPatchVersion &&
@@ -536,7 +542,7 @@ namespace WindsurfPortable
             }
 
             // ── Background Auto-Update Check ───────────────────────────────────────
-            var updateManager = new UpdateManager(baseDir, appDir, isNextBuild, patchStateFile);
+            var updateManager = new UpdateManager(launcherDir, appDir, isNextBuild, patchStateFile);
             _ = Task.Run(() => updateManager.CheckForUpdatesAsync());
 
             // ── Launch ────────────────────────────────────────────────────────────

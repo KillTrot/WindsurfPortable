@@ -44,7 +44,9 @@ sealed class Program
 
         try
         {
-            WindsurfPortable.UpdateApplier.ApplyExtractedUpdateToBaseDirectory(extractPath, AppContext.BaseDirectory);
+            WindsurfPortable.UpdateApplier.ApplyExtractedUpdateToBaseDirectory(
+                extractPath,
+                Path.Combine(AppContext.BaseDirectory, "windsurf"));
 
             var currentExe = Environment.ProcessPath;
             if (!string.IsNullOrWhiteSpace(currentExe) && File.Exists(currentExe))
