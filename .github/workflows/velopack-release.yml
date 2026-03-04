@@ -349,9 +349,20 @@ jobs:
         shell: bash
         run: vpk download github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload GitHub Release (Velopack)
+      - name: Upload GitHub Release (Velopack Win)
+        continue-on-error: true
         shell: bash
-        run: vpk upload github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "WindsurfPortable ${{ needs.version_guard.outputs.version }}" --tag v${{ needs.version_guard.outputs.version }}
+        run: vpk upload github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "WindsurfPortable ${{ needs.version_guard.outputs.version }}" --tag v${{ needs.version_guard.outputs.version }} --channel win
+
+      - name: Upload GitHub Release (Velopack macOS)
+        continue-on-error: true
+        shell: bash
+        run: vpk upload github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "WindsurfPortable ${{ needs.version_guard.outputs.version }}" --tag v${{ needs.version_guard.outputs.version }} --channel osx
+
+      - name: Upload GitHub Release (Velopack Linux)
+        continue-on-error: true
+        shell: bash
+        run: vpk upload github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "WindsurfPortable ${{ needs.version_guard.outputs.version }}" --tag v${{ needs.version_guard.outputs.version }} --channel linux
 
       - name: Upload Linux .deb to GitHub Release
         shell: bash
