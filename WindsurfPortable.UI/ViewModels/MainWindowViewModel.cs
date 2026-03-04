@@ -580,12 +580,12 @@ public partial class MainWindowViewModel : ReactiveObject
 
     private void LoadSettings()
     {
-        string patchStateFile = Path.Combine(AppContext.BaseDirectory, "windsurf", "resources", ".portable_patch_state.json");
-        if (File.Exists(patchStateFile))
+        string settingsFile = Path.Combine(AppContext.BaseDirectory, "launcher_settings.json");
+        if (File.Exists(settingsFile))
         {
             try
             {
-                var stateStr = File.ReadAllText(patchStateFile);
+                var stateStr = File.ReadAllText(settingsFile);
                 var state = System.Text.Json.JsonSerializer.Deserialize(stateStr, JsonContext.Default.DictionaryStringString);
                 if (state != null)
                 {
@@ -606,18 +606,49 @@ public partial class MainWindowViewModel : ReactiveObject
             }
             catch { }
         }
+        else
+        {
+            // Migrate from old patch state file if it exists
+            string oldSettingsFile = Path.Combine(AppContext.BaseDirectory, "windsurf", "resources", ".portable_patch_state.json");
+            if (File.Exists(oldSettingsFile))
+            {
+                try
+                {
+                    var stateStr = File.ReadAllText(oldSettingsFile);
+                    var state = System.Text.Json.JsonSerializer.Deserialize(stateStr, JsonContext.Default.DictionaryStringString);
+                    if (state != null)
+                    {
+                        if (state.TryGetValue("enable_single_instance_patch", out var sip)) _enableSingleInstancePatch = sip == "true";
+                        if (state.TryGetValue("enable_mcp_sync_isolation", out var msi)) _enableMcpSyncIsolation = msi == "true";
+                        if (state.TryGetValue("enable_global_recents_patch", out var grp)) _enableGlobalRecentsPatch = grp == "true";
+                        if (state.TryGetValue("default_profile", out var dp) && !string.IsNullOrWhiteSpace(dp)) _defaultProfile = dp;
+                        if (state.TryGetValue("auto_start_default_profile", out var asdp)) _autoStartDefaultProfile = asdp == "true";
+                        if (state.TryGetValue("auto_hide_mode", out var ahm) && !string.IsNullOrWhiteSpace(ahm)) _autoHideMode = NormalizeAutoHideMode(ahm);
+                        if (state.TryGetValue("launcher_update_repo_url", out var repo) && !string.IsNullOrWhiteSpace(repo)) _launcherUpdateRepoUrl = repo;
+                        if (state.TryGetValue("auto_download_windsurf_updates", out var adwu)) _autoDownloadWindsurfUpdates = adwu == "true";
+
+                        if (state.TryGetValue("launcher_shortcut_start_menu", out var lssm))
+                            _enableLauncherStartMenuShortcut = lssm == "true";
+                        else if (state.TryGetValue("launcher_shortcut_startup", out var legacyStartup))
+                            _enableLauncherStartMenuShortcut = legacyStartup == "true";
+                    }
+                    SaveSettings(); // Save to new location
+                }
+                catch { }
+            }
+        }
     }
 
     private void SaveSettings()
     {
-        string patchStateFile = Path.Combine(AppContext.BaseDirectory, "windsurf", "resources", ".portable_patch_state.json");
+        string settingsFile = Path.Combine(AppContext.BaseDirectory, "launcher_settings.json");
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(patchStateFile)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(settingsFile)!);
             System.Collections.Generic.Dictionary<string, string> state = new();
-            if (File.Exists(patchStateFile))
+            if (File.Exists(settingsFile))
             {
-                var stateStr = File.ReadAllText(patchStateFile);
+                var stateStr = File.ReadAllText(settingsFile);
                 state = System.Text.Json.JsonSerializer.Deserialize(stateStr, JsonContext.Default.DictionaryStringString) ?? new();
             }
 
@@ -631,7 +662,7 @@ public partial class MainWindowViewModel : ReactiveObject
             state["launcher_shortcut_start_menu"] = EnableLauncherStartMenuShortcut ? "true" : "false";
             state["auto_download_windsurf_updates"] = AutoDownloadWindsurfUpdates ? "true" : "false";
 
-            File.WriteAllText(patchStateFile, System.Text.Json.JsonSerializer.Serialize(state, JsonContext.Default.DictionaryStringString));
+            File.WriteAllText(settingsFile, System.Text.Json.JsonSerializer.Serialize(state, JsonContext.Default.DictionaryStringString));
         }
         catch { }
     }
