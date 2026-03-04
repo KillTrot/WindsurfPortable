@@ -7,13 +7,8 @@
     <PublishTrimmed>true</PublishTrimmed>
     <AssemblyName>WindsurfPortable</AssemblyName>
     <PackageId>WindsurfPortable</PackageId>
-    <Version>0.1.5</Version>
+    <Version>0.1.6</Version>
   </PropertyGroup>
-
-  <ItemGroup>
-    <!-- Add reflection-free JSON serialization source generator -->
-    <PackageReference Include="System.Text.Json" Version="9.0.0" />
-  </ItemGroup>
 
   <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">
     <OutputType>WinExe</OutputType>

@@ -8,7 +8,7 @@ using WindsurfPortable.UI.ViewModels;
 
 namespace WindsurfPortable.UI.Views;
 
-public partial class MainWindow : ShadUI.Window
+public partial class MainWindow : Window
 {
     private bool _trayModeEnabled;
     private bool _trayAvailable;

@@ -32,7 +32,11 @@ public partial class App : Application
                 DataContext = vm,
             };
 
+            vm.StartBackgroundUpdateLoops();
+
             desktop.MainWindow = mainWindow;
+
+            desktop.Exit += (_, _) => vm.StopBackgroundUpdateLoops();
 
             try
             {

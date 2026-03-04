@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Formats.Tar;
@@ -143,8 +144,16 @@ namespace WindsurfPortable
 
         private async Task HandleUpdateAvailableAsync(string downloadUrl, string newVersion, HttpClient httpClient, CancellationToken cancellationToken)
         {
-            string tempPackagePath = Path.Combine(_baseDir, GetUpdatePackageFileName(downloadUrl));
-            string extractPath = Path.Combine(_baseDir, "windsurf-update-ready");
+            string safeVersion = MakeSafePathSegment(newVersion);
+            string extractPath = Path.Combine(_baseDir, $"windsurf-update-ready-{safeVersion}");
+
+            if (Directory.Exists(extractPath))
+            {
+                UpdateAvailable?.Invoke(newVersion, extractPath);
+                return;
+            }
+
+            string tempPackagePath = Path.Combine(_baseDir, GetUpdatePackageFileName(downloadUrl, safeVersion));
 
             // Download
             var response = await httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
@@ -155,33 +164,47 @@ namespace WindsurfPortable
                 await response.Content.CopyToAsync(fs, cancellationToken);
             }
 
-            // Extract
-            if (Directory.Exists(extractPath))
-                Directory.Delete(extractPath, true);
-
             ExtractUpdatePackage(tempPackagePath, extractPath);
 
             // Trigger UI Prompt via Event
             UpdateAvailable?.Invoke(newVersion, extractPath);
             
             // Clean up downloaded package
-            File.Delete(tempPackagePath);
+            try
+            {
+                File.Delete(tempPackagePath);
+            }
+            catch
+            {
+            }
         }
 
-        private static string GetUpdatePackageFileName(string downloadUrl)
+        private static string GetUpdatePackageFileName(string downloadUrl, string safeVersion)
         {
             try
             {
                 var uri = new Uri(downloadUrl);
                 var name = Path.GetFileName(uri.LocalPath);
                 if (!string.IsNullOrWhiteSpace(name))
-                    return name;
+                    return $"windsurf-update-{safeVersion}-{name}";
             }
             catch
             {
             }
 
-            return "windsurf-update.pkg";
+            return $"windsurf-update-{safeVersion}.pkg";
+        }
+
+        private static string MakeSafePathSegment(string value)
+        {
+            var invalid = Path.GetInvalidFileNameChars();
+            var chars = value.Trim().ToCharArray();
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (invalid.Contains(chars[i]))
+                    chars[i] = '_';
+            }
+            return new string(chars);
         }
 
         private static void ExtractUpdatePackage(string packagePath, string extractPath)
@@ -205,35 +228,25 @@ namespace WindsurfPortable
 
         public void ApplyUpdateAndRestart(string extractPath, string baseDir)
         {
-            string updaterBat = Path.Combine(baseDir, "apply-update.bat");
-            string currentExe = Process.GetCurrentProcess().MainModule?.FileName ?? "WindsurfPortable.exe";
+            var currentExe = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(currentExe) || !File.Exists(currentExe))
+                return;
 
-            string batContent = $@"
-@echo off
-echo Applying Windsurf update...
-timeout /t 2 /nobreak > nul
-
-:: Copy all files from extract path to base dir
-xcopy ""{extractPath}\*"" ""{baseDir}\"" /s /e /y
-
-:: Clean up
-rmdir /s /q ""{extractPath}""
-del ""%~f0""
-
-:: Relaunch portable app
-start """" ""{currentExe}""
-";
-            File.WriteAllText(updaterBat, batContent);
+            var restartArgs = Environment.GetCommandLineArgs().Skip(1);
 
             var psi = new ProcessStartInfo
             {
-                FileName = updaterBat,
-                UseShellExecute = true,
-                CreateNoWindow = true,
-                WindowStyle = ProcessWindowStyle.Hidden
+                FileName = currentExe,
+                UseShellExecute = false,
             };
-            Process.Start(psi);
 
+            psi.ArgumentList.Add("--apply-windsurf-update");
+            psi.ArgumentList.Add(extractPath);
+            psi.ArgumentList.Add("--");
+            foreach (var a in restartArgs)
+                psi.ArgumentList.Add(a);
+
+            Process.Start(psi);
             Environment.Exit(0);
         }
     }

@@ -16,7 +16,7 @@
         TransparencyLevelHint="Mica, AcrylicBlur, Blur">
 
   <Grid RowDefinitions="Auto,Auto,*">
-    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="20,16,20,10" ColumnSpacing="12" PointerPressed="OnHeaderPointerPressed">
+    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="20,16,20,10" ColumnSpacing="12" Background="Transparent" PointerPressed="OnHeaderPointerPressed">
       <Image Grid.Column="0" Width="18" Height="18" Source="/Assets/WindsurfPortable.png" />
       <StackPanel Grid.Column="1" Spacing="0">
         <TextBlock Text="Settings" FontSize="18" FontWeight="SemiBold" />
@@ -121,6 +121,16 @@
         <TextBlock Text="Updates" FontWeight="SemiBold" FontSize="14" />
         <Border Classes="Card" Padding="20">
           <StackPanel>
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+              <StackPanel Grid.Column="0" Spacing="2">
+                <TextBlock Text="Auto-download Windsurf updates" FontWeight="SemiBold" />
+                <TextBlock Text="Downloads updates in the background (install still requires interaction)." TextWrapping="Wrap" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" FontSize="12" />
+              </StackPanel>
+              <CheckBox Grid.Column="1" VerticalAlignment="Center" IsChecked="{Binding AutoDownloadWindsurfUpdates}" />
+            </Grid>
+
+            <Border Height="1" Background="{DynamicResource SystemControlForegroundChromeLowBrush}" Margin="0,12,0,12" />
+
             <StackPanel Spacing="2">
               <TextBlock Text="Launcher updates" FontWeight="SemiBold" />
               <TextBlock Text="Uses GitHub Releases (Velopack)." TextWrapping="Wrap" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" FontSize="12" />

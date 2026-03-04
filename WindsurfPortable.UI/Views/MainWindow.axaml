@@ -1,20 +1,18 @@
-<shad:Window xmlns="https://github.com/avaloniaui"
+<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:WindsurfPortable.UI.ViewModels"
+        xmlns:shadui="clr-namespace:ShadUI;assembly=ShadUI"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:shad="clr-namespace:ShadUI;assembly=ShadUI"
         mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
         x:Class="WindsurfPortable.UI.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="Windsurf Portable Launcher"
-        TitleFontWeight="SemiBold"
         Width="600" Height="400"
         MinWidth="600" MinHeight="400"
         WindowStartupLocation="CenterScreen"
         Icon="/Assets/WindsurfPortable.ico"
         Background="Transparent"
-        ShowTitlebarBackground="False"
         TransparencyLevelHint="Mica, AcrylicBlur, Blur">
 
     <Design.DataContext>
@@ -24,7 +22,7 @@
     </Design.DataContext>
 
     <Grid RowDefinitions="Auto,*,Auto" Margin="20" RowSpacing="14">
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="0,0,0,6" PointerPressed="OnHeaderPointerPressed">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="0,0,0,6" Background="Transparent" PointerPressed="OnHeaderPointerPressed">
             <Grid Grid.Column="0" ColumnDefinitions="Auto,*" ColumnSpacing="10">
                 <Image Grid.Column="0" Width="32" Height="32" Source="/Assets/WindsurfPortable.png" />
                 <StackPanel Grid.Column="1" Spacing="2">
@@ -34,14 +32,6 @@
             </Grid>
             <Button Grid.Column="1" Content="Settings" Classes="Ghost" Click="OnOpenSettings" VerticalAlignment="Center" />
         </Grid>
-
-        <Border Grid.Row="0" IsVisible="{Binding IsUpdateAvailable}" Classes="Card" Padding="14" Margin="0,48,0,0">
-            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10" VerticalAlignment="Center">
-                <TextBlock Grid.Column="0" Text="{Binding UpdateMessage}" VerticalAlignment="Center" FontWeight="SemiBold" />
-                <Button Grid.Column="1" Content="Update &amp; Restart" Command="{Binding ApplyUpdateCommand}" Classes="Primary" />
-                <Button Grid.Column="2" Content="Skip" Command="{Binding SkipUpdateCommand}" Classes="Secondary" />
-            </Grid>
-        </Border>
 
         <Border Grid.Row="1" IsVisible="{Binding IsWindsurfMissing}" Classes="Card" Padding="20">
             <StackPanel Spacing="14" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="420">
@@ -73,8 +63,45 @@
             <TextBlock Grid.Column="0" Text="{Binding StatusMessage}"
                        VerticalAlignment="Center" Classes="muted" TextWrapping="Wrap" />
 
-            <Button Grid.Column="1" Content="Launch" Command="{Binding LaunchCommand}" Classes="Primary" FontWeight="SemiBold" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
+                <Button Content="Debug banners" Command="{Binding DebugCycleBannersCommand}" Classes="Secondary" IsVisible="{Binding IsDebugBuild}" />
+                <Button Content="Launch" Command="{Binding LaunchCommand}" Classes="Primary" FontWeight="SemiBold" />
+            </StackPanel>
         </Grid>
+
+        <Border Grid.RowSpan="3" ZIndex="15" HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Margin="5,0,5,5" Background="Transparent"
+                IsVisible="{Binding IsUpdateOverlayVisible}">
+            <Border Classes="Card" Background="WhiteSmoke" Padding="14" CornerRadius="12" BoxShadow="0 6 16 0 #40000000">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" VerticalAlignment="Center">
+                    <TextBlock Grid.Column="0" Text="{Binding UpdateOverlayMessage}" VerticalAlignment="Center" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="#111827" />
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Button Content="Dismiss" Command="{Binding DismissUpdateOverlayCommand}" Classes="Secondary" Foreground="#111827" />
+
+                        <Button Content="Restart" Command="{Binding RestartToApplyLauncherUpdateCommand}" Classes="Primary"
+                                IsVisible="{Binding ShowLauncherRestartButton}" Background="#111827" Foreground="White" />
+
+                        <Button Command="{Binding ApplyUpdateCommand}" Classes="Primary"
+                                IsVisible="{Binding ShowWindsurfUpdateButtons}" Background="#111827" Foreground="White">
+                            <Button.Styles>
+                                <Style Selector="TextBlock#UpdateRestartText">
+                                    <Setter Property="Foreground" Value="White" />
+                                </Style>
+                                <Style Selector="Button:pointerover TextBlock#UpdateRestartText">
+                                    <Setter Property="Foreground" Value="Black" />
+                                </Style>
+                            </Button.Styles>
+                            <TextBlock Name="UpdateRestartText" Text="Update &amp; Restart" />
+                        </Button>
+
+                        <Button Content="Skip" Command="{Binding SkipUpdateCommand}" Classes="Secondary"
+                                IsVisible="{Binding ShowWindsurfUpdateButtons}" Foreground="#111827" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Border>
+
+        <shadui:DialogHost Manager="{Binding DialogManager}" Grid.RowSpan="3" ZIndex="18" />
 
         <Border Grid.RowSpan="3" IsVisible="{Binding IsBusy}" ZIndex="20" Background="Black" Opacity="0.35" Margin="-20">
             <Border Classes="Card" HorizontalAlignment="Center" VerticalAlignment="Center" Width="360" Padding="20">
@@ -88,4 +115,4 @@
         </Border>
     </Grid>
 
-</shad:Window>
+</Window>

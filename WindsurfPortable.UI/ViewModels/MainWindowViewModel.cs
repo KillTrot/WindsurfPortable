@@ -8,12 +8,14 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Reactive;
 using System.Text.Json.Serialization;
+using System.Threading;
 using Avalonia.Threading;
 using ReactiveUI;
+using ShadUI;
 using Velopack;
 using Velopack.Sources;
-using Velopack.Windows;
 using WindsurfPortable;
+using WindsurfPortable.UI;
 
 namespace WindsurfPortable.UI.ViewModels;
 
@@ -26,6 +28,21 @@ internal partial class UpdateResponseContext : JsonSerializerContext { }
 public partial class MainWindowViewModel : ReactiveObject
 {
     private const string DefaultLauncherUpdateRepoUrl = "https://github.com/KillTrot/WindsurfPortable";
+    private const string OfficialLauncherUpdateRepoUrl = "https://github.com/KillTrot/WindsurfPortable";
+
+    public DialogManager DialogManager { get; } = new();
+
+    public bool IsDebugBuild
+    {
+        get
+        {
+#if DEBUG
+            return true;
+#else
+            return false;
+#endif
+        }
+    }
 
     public bool IsWindows => OperatingSystem.IsWindows();
 
@@ -40,6 +57,17 @@ public partial class MainWindowViewModel : ReactiveObject
         set
         {
             this.RaiseAndSetIfChanged(ref _autoHideMode, value);
+            SaveSettings();
+        }
+    }
+
+    private bool _autoDownloadWindsurfUpdates = true;
+    public bool AutoDownloadWindsurfUpdates
+    {
+        get => _autoDownloadWindsurfUpdates;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _autoDownloadWindsurfUpdates, value);
             SaveSettings();
         }
     }
@@ -108,11 +136,44 @@ public partial class MainWindowViewModel : ReactiveObject
         set => this.RaiseAndSetIfChanged(ref _isUpdateAvailable, value);
     }
 
+    public bool CanApplyWindsurfUpdate => IsUpdateAvailable && !IsWindsurfRunning && !string.IsNullOrEmpty(_pendingExtractPath);
+    public bool IsUpdateAvailableAndWindsurfRunning => IsUpdateAvailable && IsWindsurfRunning;
+
+    public bool IsUpdateOverlayVisible => IsLauncherRestartUpdateAvailable || IsUpdateAvailable;
+
+    public string UpdateOverlayMessage
+    {
+        get
+        {
+            if (IsLauncherRestartUpdateAvailable)
+                return LauncherRestartUpdateMessage;
+
+            return UpdateMessage;
+        }
+    }
+
+    public bool ShowLauncherRestartButton => IsLauncherRestartUpdateAvailable;
+    public bool ShowWindsurfUpdateButtons => IsUpdateAvailable;
+
     private bool _isLauncherUpdateAvailable;
     public bool IsLauncherUpdateAvailable
     {
         get => _isLauncherUpdateAvailable;
         set => this.RaiseAndSetIfChanged(ref _isLauncherUpdateAvailable, value);
+    }
+
+    private bool _isLauncherRestartUpdateAvailable;
+    public bool IsLauncherRestartUpdateAvailable
+    {
+        get => _isLauncherRestartUpdateAvailable;
+        set => this.RaiseAndSetIfChanged(ref _isLauncherRestartUpdateAvailable, value);
+    }
+
+    private string _launcherRestartUpdateMessage = "";
+    public string LauncherRestartUpdateMessage
+    {
+        get => _launcherRestartUpdateMessage;
+        set => this.RaiseAndSetIfChanged(ref _launcherRestartUpdateMessage, value);
     }
 
     private string _launcherUpdateMessage = "";
@@ -199,8 +260,11 @@ public partial class MainWindowViewModel : ReactiveObject
     public ReactiveCommand<string, Unit> DownloadInitialCommand { get; }
     public ReactiveCommand<Unit, Unit> CheckLauncherUpdatesCommand { get; }
     public ReactiveCommand<Unit, Unit> ApplyLauncherUpdateCommand { get; }
+    public ReactiveCommand<Unit, Unit> RestartToApplyLauncherUpdateCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenGitHubCommand { get; }
     public ReactiveCommand<Unit, Unit> CreateDesktopShortcutCommand { get; }
+    public ReactiveCommand<Unit, Unit> DebugCycleBannersCommand { get; }
+    public ReactiveCommand<Unit, Unit> DismissUpdateOverlayCommand { get; }
 
     private UpdateManager? _updateManager;
     private string _pendingExtractPath = "";
@@ -209,12 +273,19 @@ public partial class MainWindowViewModel : ReactiveObject
     private Velopack.UpdateManager? _launcherUpdateManager;
     private Velopack.UpdateInfo? _launcherUpdateInfo;
 
+    private CancellationTokenSource? _updateLoopCts;
+
+    private int _debugBannerState;
+
     public MainWindowViewModel()
     {
         LoadSettings();
 
         if (string.IsNullOrWhiteSpace(LauncherUpdateRepoUrl))
             LauncherUpdateRepoUrl = DefaultLauncherUpdateRepoUrl;
+
+        if (string.Equals(LauncherUpdateRepoUrl, DefaultLauncherUpdateRepoUrl, StringComparison.OrdinalIgnoreCase))
+            LauncherUpdateRepoUrl = OfficialLauncherUpdateRepoUrl;
 
         ApplyLauncherShortcuts();
 
@@ -314,6 +385,16 @@ public partial class MainWindowViewModel : ReactiveObject
 
         ApplyUpdateCommand = ReactiveCommand.Create(() =>
         {
+            if (IsWindsurfRunning)
+            {
+                DialogManager
+                    .CreateDialog("Close Windsurf", "Windsurf is currently running. Close it first, then click Update again.")
+                    .WithPrimaryButton("OK", () => { })
+                    .Dismissible()
+                    .Show();
+                return;
+            }
+
             if (_updateManager != null && !string.IsNullOrEmpty(_pendingExtractPath))
             {
                 _updateManager.ApplyUpdateAndRestart(_pendingExtractPath, AppContext.BaseDirectory);
@@ -344,14 +425,155 @@ public partial class MainWindowViewModel : ReactiveObject
             await ApplyLauncherUpdateAsync();
         });
 
+        RestartToApplyLauncherUpdateCommand = ReactiveCommand.CreateFromTask(async () =>
+        {
+            await RestartToApplyLauncherUpdateAsync();
+        });
+
         CreateDesktopShortcutCommand = ReactiveCommand.Create(() =>
         {
             CreateDesktopShortcut();
         });
 
+        DismissUpdateOverlayCommand = ReactiveCommand.Create(() =>
+        {
+            if (IsLauncherRestartUpdateAvailable)
+            {
+                IsLauncherRestartUpdateAvailable = false;
+                LauncherRestartUpdateMessage = "";
+            }
+            else if (IsUpdateAvailable)
+            {
+                IsUpdateAvailable = false;
+                UpdateMessage = "";
+                _pendingExtractPath = "";
+                _pendingNewVersion = "";
+            }
+
+            this.RaisePropertyChanged(nameof(IsUpdateOverlayVisible));
+            this.RaisePropertyChanged(nameof(UpdateOverlayMessage));
+            this.RaisePropertyChanged(nameof(ShowLauncherRestartButton));
+            this.RaisePropertyChanged(nameof(ShowWindsurfUpdateButtons));
+        });
+
+        DebugCycleBannersCommand = ReactiveCommand.Create(() =>
+        {
+            _debugBannerState = (_debugBannerState + 1) % 5;
+
+            if (_debugBannerState == 0)
+            {
+                IsUpdateAvailable = false;
+                UpdateMessage = "";
+                _pendingExtractPath = "";
+                _pendingNewVersion = "";
+                IsWindsurfRunning = false;
+                IsLauncherRestartUpdateAvailable = false;
+                LauncherRestartUpdateMessage = "";
+            }
+            else if (_debugBannerState == 1)
+            {
+                IsUpdateAvailable = true;
+                UpdateMessage = "Update available: 0.0.0-debug";
+                _pendingNewVersion = "0.0.0-debug";
+                _pendingExtractPath = Path.Combine(AppContext.BaseDirectory, "windsurf-update-ready-0.0.0-debug");
+                IsWindsurfRunning = false;
+                IsLauncherRestartUpdateAvailable = false;
+                LauncherRestartUpdateMessage = "";
+            }
+            else if (_debugBannerState == 2)
+            {
+                IsUpdateAvailable = true;
+                UpdateMessage = "Update available: 0.0.0-debug";
+                _pendingNewVersion = "0.0.0-debug";
+                _pendingExtractPath = Path.Combine(AppContext.BaseDirectory, "windsurf-update-ready-0.0.0-debug");
+                IsWindsurfRunning = true;
+                IsLauncherRestartUpdateAvailable = false;
+                LauncherRestartUpdateMessage = "";
+            }
+            else if (_debugBannerState == 3)
+            {
+                IsUpdateAvailable = false;
+                UpdateMessage = "";
+                _pendingExtractPath = "";
+                _pendingNewVersion = "";
+                IsWindsurfRunning = false;
+                IsLauncherRestartUpdateAvailable = true;
+                LauncherRestartUpdateMessage = "Launcher update available: 0.0.0-debug — restart to update";
+            }
+            else
+            {
+                IsUpdateAvailable = true;
+                UpdateMessage = "Update available: 0.0.0-debug";
+                _pendingNewVersion = "0.0.0-debug";
+                _pendingExtractPath = Path.Combine(AppContext.BaseDirectory, "windsurf-update-ready-0.0.0-debug");
+                IsWindsurfRunning = false;
+                IsLauncherRestartUpdateAvailable = true;
+                LauncherRestartUpdateMessage = "Launcher update available: 0.0.0-debug — restart to update";
+            }
+
+            this.RaisePropertyChanged(nameof(CanApplyWindsurfUpdate));
+            this.RaisePropertyChanged(nameof(IsUpdateAvailableAndWindsurfRunning));
+            this.RaisePropertyChanged(nameof(IsUpdateOverlayVisible));
+            this.RaisePropertyChanged(nameof(UpdateOverlayMessage));
+            this.RaisePropertyChanged(nameof(ShowLauncherRestartButton));
+            this.RaisePropertyChanged(nameof(ShowWindsurfUpdateButtons));
+        });
+
         if (!IsWindsurfMissing)
         {
             InitializeUpdateChecker();
+        }
+
+        this.WhenAnyValue(x => x.IsWindsurfRunning)
+            .Subscribe(_ =>
+            {
+                this.RaisePropertyChanged(nameof(CanApplyWindsurfUpdate));
+                this.RaisePropertyChanged(nameof(IsUpdateAvailableAndWindsurfRunning));
+            });
+
+        this.WhenAnyValue(x => x.IsUpdateAvailable)
+            .Subscribe(_ =>
+            {
+                this.RaisePropertyChanged(nameof(CanApplyWindsurfUpdate));
+                this.RaisePropertyChanged(nameof(IsUpdateAvailableAndWindsurfRunning));
+            });
+
+        this.WhenAnyValue(x => x.IsUpdateAvailable, x => x.IsLauncherRestartUpdateAvailable)
+            .Subscribe(_ =>
+            {
+                this.RaisePropertyChanged(nameof(IsUpdateOverlayVisible));
+                this.RaisePropertyChanged(nameof(UpdateOverlayMessage));
+                this.RaisePropertyChanged(nameof(ShowLauncherRestartButton));
+                this.RaisePropertyChanged(nameof(ShowWindsurfUpdateButtons));
+            });
+
+        this.WhenAnyValue(x => x.UpdateMessage, x => x.LauncherRestartUpdateMessage)
+            .Subscribe(_ => this.RaisePropertyChanged(nameof(UpdateOverlayMessage)));
+    }
+
+    public void StartBackgroundUpdateLoops()
+    {
+        StopBackgroundUpdateLoops();
+        _updateLoopCts = new CancellationTokenSource();
+        var token = _updateLoopCts.Token;
+
+        _ = System.Threading.Tasks.Task.Run(() => LauncherUpdateLoopAsync(token));
+        _ = System.Threading.Tasks.Task.Run(() => WindsurfUpdateLoopAsync(token));
+    }
+
+    public void StopBackgroundUpdateLoops()
+    {
+        try
+        {
+            _updateLoopCts?.Cancel();
+            _updateLoopCts?.Dispose();
+        }
+        catch
+        {
+        }
+        finally
+        {
+            _updateLoopCts = null;
         }
     }
 
@@ -373,6 +595,7 @@ public partial class MainWindowViewModel : ReactiveObject
                     if (state.TryGetValue("auto_start_default_profile", out var asdp)) _autoStartDefaultProfile = asdp == "true";
                     if (state.TryGetValue("auto_hide_mode", out var ahm) && !string.IsNullOrWhiteSpace(ahm)) _autoHideMode = NormalizeAutoHideMode(ahm);
                     if (state.TryGetValue("launcher_update_repo_url", out var repo) && !string.IsNullOrWhiteSpace(repo)) _launcherUpdateRepoUrl = repo;
+                    if (state.TryGetValue("auto_download_windsurf_updates", out var adwu)) _autoDownloadWindsurfUpdates = adwu == "true";
 
                     if (state.TryGetValue("launcher_shortcut_start_menu", out var lssm))
                         _enableLauncherStartMenuShortcut = lssm == "true";
@@ -405,6 +628,7 @@ public partial class MainWindowViewModel : ReactiveObject
             state["auto_hide_mode"] = AutoHideMode;
             state["launcher_update_repo_url"] = LauncherUpdateRepoUrl;
             state["launcher_shortcut_start_menu"] = EnableLauncherStartMenuShortcut ? "true" : "false";
+            state["auto_download_windsurf_updates"] = AutoDownloadWindsurfUpdates ? "true" : "false";
 
             File.WriteAllText(patchStateFile, System.Text.Json.JsonSerializer.Serialize(state, JsonContext.Default.DictionaryStringString));
         }
@@ -433,12 +657,10 @@ public partial class MainWindowViewModel : ReactiveObject
 
         try
         {
-            var shortcuts = new Shortcuts();
-
             if (EnableLauncherStartMenuShortcut)
-                shortcuts.CreateShortcutForThisExe(ShortcutLocation.StartMenuRoot);
+                WindowsShortcutService.CreateOrUpdateStartMenuShortcut();
             else
-                shortcuts.RemoveShortcutForThisExe(ShortcutLocation.StartMenuRoot);
+                WindowsShortcutService.RemoveStartMenuShortcut();
         }
         catch
         {
@@ -452,8 +674,7 @@ public partial class MainWindowViewModel : ReactiveObject
 
         try
         {
-            var shortcuts = new Shortcuts();
-            shortcuts.CreateShortcutForThisExe(ShortcutLocation.Desktop);
+            WindowsShortcutService.CreateOrUpdateDesktopShortcut();
             StatusMessage = "Desktop shortcut created.";
         }
         catch (Exception ex)
@@ -515,11 +736,95 @@ public partial class MainWindowViewModel : ReactiveObject
         {
             LauncherUpdateMessage = "Downloading launcher update…";
             await mgr.DownloadUpdatesAsync(info);
-            mgr.ApplyUpdatesAndRestart(info.TargetFullRelease);
+            IsLauncherRestartUpdateAvailable = true;
+            LauncherRestartUpdateMessage = $"Launcher update available: {info.TargetFullRelease.Version} — restart to update";
         }
         catch (Exception ex)
         {
             LauncherUpdateMessage = $"Launcher update failed: {ex.Message}";
+        }
+    }
+
+    private async System.Threading.Tasks.Task RestartToApplyLauncherUpdateAsync()
+    {
+        var mgr = _launcherUpdateManager ?? CreateLauncherUpdateManager();
+        if (mgr == null || !mgr.IsInstalled)
+            return;
+
+        var pending = mgr.UpdatePendingRestart;
+        if (pending == null)
+            return;
+
+        mgr.ApplyUpdatesAndRestart(pending, Program.RestartArgs);
+        await System.Threading.Tasks.Task.CompletedTask;
+    }
+
+    private async System.Threading.Tasks.Task LauncherUpdateLoopAsync(CancellationToken token)
+    {
+        while (!token.IsCancellationRequested)
+        {
+            try
+            {
+                var mgr = CreateLauncherUpdateManager();
+                _launcherUpdateManager = mgr;
+                if (mgr != null && mgr.IsInstalled)
+                {
+                    var pending = mgr.UpdatePendingRestart;
+                    if (pending != null)
+                    {
+                        mgr.ApplyUpdatesAndRestart(pending, Program.RestartArgs);
+                        return;
+                    }
+
+                    var info = await mgr.CheckForUpdatesAsync();
+                    if (info != null)
+                    {
+                        _launcherUpdateInfo = info;
+                        await mgr.DownloadUpdatesAsync(info);
+                        IsLauncherRestartUpdateAvailable = true;
+                        LauncherRestartUpdateMessage = $"Launcher update available: {info.TargetFullRelease.Version} — restart to update";
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                await System.Threading.Tasks.Task.Delay(TimeSpan.FromMinutes(15), token);
+            }
+            catch
+            {
+                return;
+            }
+        }
+    }
+
+    private async System.Threading.Tasks.Task WindsurfUpdateLoopAsync(CancellationToken token)
+    {
+        while (!token.IsCancellationRequested)
+        {
+            try
+            {
+                if (!IsWindsurfMissing && AutoDownloadWindsurfUpdates)
+                {
+                    if (_updateManager != null)
+                        await _updateManager.CheckForUpdatesAsync(token);
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                await System.Threading.Tasks.Task.Delay(TimeSpan.FromHours(1), token);
+            }
+            catch
+            {
+                return;
+            }
         }
     }
 
@@ -685,10 +990,13 @@ public partial class MainWindowViewModel : ReactiveObject
                 _pendingExtractPath = extractPath;
                 UpdateMessage = $"Update available: {newVersion}";
                 IsUpdateAvailable = true;
+                this.RaisePropertyChanged(nameof(CanApplyWindsurfUpdate));
+                this.RaisePropertyChanged(nameof(IsUpdateAvailableAndWindsurfRunning));
             });
         };
 
-        System.Threading.Tasks.Task.Run(() => _updateManager.CheckForUpdatesAsync());
+        if (AutoDownloadWindsurfUpdates)
+            System.Threading.Tasks.Task.Run(() => _updateManager.CheckForUpdatesAsync());
     }
 
     private static bool IsNextBuildFromStateOrApp(string appDir, string patchStateFile)
