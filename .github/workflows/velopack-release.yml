@@ -200,6 +200,11 @@ jobs:
             icon_arg="--icon artifacts/icon.icns"
           fi
 
+          shortcut_arg=""
+          if [ "${{ matrix.vpkOs }}" = "win" ]; then
+            shortcut_arg="--shortcuts StartMenuRoot"
+          fi
+
           mkdir -p "Releases/${{ matrix.name }}"
 
           if [ "${{ matrix.vpkOs }}" = "win" ] && [ "${{ runner.os }}" != "Windows" ]; then
@@ -212,7 +217,7 @@ jobs:
               --outputDir "Releases/${{ matrix.rid }}" \
               --packTitle "WindsurfPortable" \
               --packAuthors "KillTrot" \
-              --shortcuts StartMenuRoot \
+              $shortcut_arg \
               $icon_arg
             exit 0
           fi
@@ -226,7 +231,7 @@ jobs:
             --outputDir "Releases/${{ matrix.rid }}" \
             --packTitle "WindsurfPortable" \
             --packAuthors "KillTrot" \
-            --shortcuts StartMenuRoot \
+            $shortcut_arg \
             $icon_arg
 
       - name: Build Linux .deb
