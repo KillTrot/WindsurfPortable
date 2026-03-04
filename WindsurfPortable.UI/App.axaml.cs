@@ -77,20 +77,33 @@ public partial class App : Application
             if (!string.IsNullOrWhiteSpace(startup.Profile))
                 vm.SelectedProfile = startup.Profile.Trim();
 
-            var shouldStart = startup.Start || vm.AutoStartDefaultProfile;
+            var shouldStart = startup.Autostart || vm.AutoStartDefaultProfile;
             if (shouldStart)
             {
                 if (string.IsNullOrWhiteSpace(startup.Profile) && vm.AutoStartDefaultProfile)
                     vm.SetSelectedProfileToDefaultIfPossible();
 
                 vm.StartSelectedProfileInBackground();
-                if (_tray != null)
-                    mainWindow.Hide();
             }
-            else if (startup.Tray && _tray != null)
+
+            if (startup.Tray && _tray != null)
             {
-                mainWindow.Hide();
+                if (shouldStart)
+                {
+                    // Only hide after a successful launch. If startup fails (e.g. Windsurf missing),
+                    // keep the window visible so the user can see the error.
+                    vm.PropertyChanged += (_, e) =>
+                    {
+                        if (e.PropertyName == nameof(MainWindowViewModel.IsWindsurfRunning) && vm.IsWindsurfRunning)
+                            mainWindow.Hide();
+                    };
+                }
+                else
+                {
+                    mainWindow.Hide();
+                }
             }
+
         }
 
         base.OnFrameworkInitializationCompleted();

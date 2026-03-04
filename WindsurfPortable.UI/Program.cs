@@ -7,7 +7,7 @@ namespace WindsurfPortable.UI;
 
 sealed class Program
 {
-    public static StartupOptions StartupOptions { get; private set; } = new(null, Start: false, Tray: false);
+    public static StartupOptions StartupOptions { get; private set; } = new(null, Autostart: false, Tray: false);
 
     // Initialization code. Don't use any Avalonia, third-party APIs or any
     // SynchronizationContext-reliant code before AppMain is called: things aren't initialized

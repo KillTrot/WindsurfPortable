@@ -11,6 +11,7 @@
         TitleFontWeight="SemiBold"
         Width="600" Height="400"
         WindowStartupLocation="CenterScreen"
+        Icon="/Assets/WindsurfPortable.ico"
         Background="Transparent"
         ShowTitlebarBackground="False"
         TransparencyLevelHint="Mica, AcrylicBlur, Blur">
@@ -23,10 +24,13 @@
 
     <Grid RowDefinitions="Auto,*,Auto" Margin="20" RowSpacing="14">
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="0,0,0,6">
-            <StackPanel Grid.Column="0" Spacing="2">
-                <TextBlock Text="Windsurf Portable" FontSize="24" FontWeight="Bold" />
-                <TextBlock Text="Profile-isolated launcher" Classes="muted" FontSize="12" />
-            </StackPanel>
+            <Grid Grid.Column="0" ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                <Image Grid.Column="0" Width="32" Height="32" Source="/Assets/WindsurfPortable.png" />
+                <StackPanel Grid.Column="1" Spacing="2">
+                    <TextBlock Text="Windsurf Portable" FontSize="24" FontWeight="Bold" />
+                    <TextBlock Text="Profile-isolated launcher" Classes="muted" FontSize="12" />
+                </StackPanel>
+            </Grid>
             <Button Grid.Column="1" Content="Settings" Classes="Ghost" Click="OnOpenSettings" VerticalAlignment="Center" />
         </Grid>
 

@@ -11,6 +11,7 @@ using Avalonia.Threading;
 using ReactiveUI;
 using Velopack;
 using Velopack.Sources;
+using Velopack.Windows;
 using WindsurfPortable;
 
 namespace WindsurfPortable.UI.ViewModels;
@@ -129,6 +130,30 @@ public partial class MainWindowViewModel : ReactiveObject
         }
     }
 
+    private bool _enableLauncherDesktopShortcut;
+    public bool EnableLauncherDesktopShortcut
+    {
+        get => _enableLauncherDesktopShortcut;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _enableLauncherDesktopShortcut, value);
+            SaveSettings();
+            ApplyLauncherShortcuts();
+        }
+    }
+
+    private bool _enableLauncherStartupShortcut;
+    public bool EnableLauncherStartupShortcut
+    {
+        get => _enableLauncherStartupShortcut;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _enableLauncherStartupShortcut, value);
+            SaveSettings();
+            ApplyLauncherShortcuts();
+        }
+    }
+
     private string _updateMessage = "";
     public string UpdateMessage
     {
@@ -183,6 +208,7 @@ public partial class MainWindowViewModel : ReactiveObject
     public ReactiveCommand<string, Unit> DownloadInitialCommand { get; }
     public ReactiveCommand<Unit, Unit> CheckLauncherUpdatesCommand { get; }
     public ReactiveCommand<Unit, Unit> ApplyLauncherUpdateCommand { get; }
+    public ReactiveCommand<Unit, Unit> OpenGitHubCommand { get; }
 
     private UpdateManager? _updateManager;
     private string _pendingExtractPath = "";
@@ -198,13 +224,14 @@ public partial class MainWindowViewModel : ReactiveObject
         if (string.IsNullOrWhiteSpace(LauncherUpdateRepoUrl))
             LauncherUpdateRepoUrl = DefaultLauncherUpdateRepoUrl;
 
+        ApplyLauncherShortcuts();
+
         CheckIfWindsurfMissing();
         LoadProfiles();
 
         LaunchCommand = ReactiveCommand.CreateFromTask(async () =>
         {
             IsBusy = true;
-            IsWindsurfRunning = true;
             StatusMessage = $"Launching Windsurf ({SelectedProfile} profile)...";
 
             if (ShouldAutoHideImmediately())
@@ -233,6 +260,8 @@ public partial class MainWindowViewModel : ReactiveObject
                     IsWindsurfRunning = false;
                     return;
                 }
+
+                IsWindsurfRunning = true;
 
                 try
                 {
@@ -264,6 +293,21 @@ public partial class MainWindowViewModel : ReactiveObject
             finally
             {
                 IsBusy = false;
+            }
+        });
+
+        OpenGitHubCommand = ReactiveCommand.Create(() =>
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "https://github.com/KillTrot/WindsurfPortable",
+                    UseShellExecute = true,
+                });
+            }
+            catch
+            {
             }
         });
 
@@ -332,6 +376,8 @@ public partial class MainWindowViewModel : ReactiveObject
                     if (state.TryGetValue("auto_start_default_profile", out var asdp)) _autoStartDefaultProfile = asdp == "true";
                     if (state.TryGetValue("auto_hide_mode", out var ahm) && !string.IsNullOrWhiteSpace(ahm)) _autoHideMode = NormalizeAutoHideMode(ahm);
                     if (state.TryGetValue("launcher_update_repo_url", out var repo) && !string.IsNullOrWhiteSpace(repo)) _launcherUpdateRepoUrl = repo;
+                    if (state.TryGetValue("launcher_shortcut_desktop", out var lsd)) _enableLauncherDesktopShortcut = lsd == "true";
+                    if (state.TryGetValue("launcher_shortcut_startup", out var lss)) _enableLauncherStartupShortcut = lss == "true";
                 }
             }
             catch { }
@@ -358,6 +404,8 @@ public partial class MainWindowViewModel : ReactiveObject
             state["auto_start_default_profile"] = AutoStartDefaultProfile ? "true" : "false";
             state["auto_hide_mode"] = AutoHideMode;
             state["launcher_update_repo_url"] = LauncherUpdateRepoUrl;
+            state["launcher_shortcut_desktop"] = EnableLauncherDesktopShortcut ? "true" : "false";
+            state["launcher_shortcut_startup"] = EnableLauncherStartupShortcut ? "true" : "false";
 
             File.WriteAllText(patchStateFile, System.Text.Json.JsonSerializer.Serialize(state, JsonContext.Default.DictionaryStringString));
         }
@@ -371,25 +419,35 @@ public partial class MainWindowViewModel : ReactiveObject
 
         try
         {
-            // Extract owner/repo from full GitHub URL if provided
-            string repoUrl = LauncherUpdateRepoUrl.Trim();
-            if (repoUrl.StartsWith("https://github.com/", StringComparison.OrdinalIgnoreCase))
-            {
-                var uri = new Uri(repoUrl);
-                var path = uri.AbsolutePath.Trim('/');
-                // Remove .git suffix if present
-                if (path.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
-                {
-                    path = path.Substring(0, path.Length - 4);
-                }
-                repoUrl = path;
-            }
-
-            return new Velopack.UpdateManager(new GithubSource(repoUrl, string.Empty, prerelease: false));
+            return new Velopack.UpdateManager(new GithubSource(LauncherUpdateRepoUrl.Trim(), string.Empty, prerelease: false));
         }
         catch
         {
             return null;
+        }
+    }
+
+    private void ApplyLauncherShortcuts()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        try
+        {
+            var shortcuts = new Shortcuts();
+
+            if (EnableLauncherDesktopShortcut)
+                shortcuts.CreateShortcutForThisExe(ShortcutLocation.Desktop);
+            else
+                shortcuts.RemoveShortcutForThisExe(ShortcutLocation.Desktop);
+
+            if (EnableLauncherStartupShortcut)
+                shortcuts.CreateShortcutForThisExe(ShortcutLocation.Startup);
+            else
+                shortcuts.RemoveShortcutForThisExe(ShortcutLocation.Startup);
+        }
+        catch
+        {
         }
     }
 

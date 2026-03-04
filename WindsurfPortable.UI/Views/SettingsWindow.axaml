@@ -9,13 +9,14 @@
         Title="Settings"
         Width="560" Height="520"
         WindowStartupLocation="CenterOwner"
+        Icon="/Assets/WindsurfPortable.ico"
         Background="Transparent"
         SystemDecorations="BorderOnly"
         TransparencyLevelHint="Mica, AcrylicBlur, Blur">
 
   <Grid RowDefinitions="Auto,Auto,*">
     <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="20,16,20,10" ColumnSpacing="12">
-      <Image Grid.Column="0" Width="18" Height="18" Source="/Assets/avalonia-logo.ico" />
+      <Image Grid.Column="0" Width="18" Height="18" Source="/Assets/WindsurfPortable.png" />
       <StackPanel Grid.Column="1" Spacing="0">
         <TextBlock Text="Settings" FontSize="18" FontWeight="SemiBold" />
         <TextBlock Text="Windsurf Portable" FontSize="12" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
@@ -105,6 +106,8 @@
               <TextBlock Text="Uses GitHub Releases (Velopack)." TextWrapping="Wrap" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" FontSize="12" />
             </StackPanel>
 
+            <Button Margin="0,12,0,0" Content="Open GitHub" Classes="Secondary" Command="{Binding OpenGitHubCommand}" />
+
             <TextBox Margin="0,12,0,0"
                      Watermark="https://github.com/owner/repo"
                      Text="{Binding LauncherUpdateRepoUrl}" />
@@ -115,6 +118,26 @@
                       Command="{Binding ApplyLauncherUpdateCommand}"
                       IsEnabled="{Binding IsLauncherUpdateAvailable}" />
             </StackPanel>
+
+            <Border Height="1" Background="{DynamicResource SystemControlForegroundChromeLowBrush}" Margin="0,12,0,12" />
+
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+              <StackPanel Grid.Column="0" Spacing="2">
+                <TextBlock Text="Desktop shortcut" FontWeight="SemiBold" />
+                <TextBlock Text="Create a desktop shortcut for the launcher." TextWrapping="Wrap" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" FontSize="12" />
+              </StackPanel>
+              <CheckBox Grid.Column="1" VerticalAlignment="Center" IsChecked="{Binding EnableLauncherDesktopShortcut}" />
+            </Grid>
+
+            <Border Height="1" Background="{DynamicResource SystemControlForegroundChromeLowBrush}" Margin="0,12,0,12" />
+
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+              <StackPanel Grid.Column="0" Spacing="2">
+                <TextBlock Text="Start with Windows" FontWeight="SemiBold" />
+                <TextBlock Text="Add the launcher to the Startup folder." TextWrapping="Wrap" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" FontSize="12" />
+              </StackPanel>
+              <CheckBox Grid.Column="1" VerticalAlignment="Center" IsChecked="{Binding EnableLauncherStartupShortcut}" />
+            </Grid>
 
             <TextBlock Margin="0,12,0,0" Text="{Binding LauncherUpdateMessage}" TextWrapping="Wrap" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
           </StackPanel>

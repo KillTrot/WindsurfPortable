@@ -7,7 +7,7 @@ public static class ArgParser
     public static StartupOptions Parse(string[] args)
     {
         string? profile = null;
-        bool start = false;
+        bool autostart = false;
         bool tray = false;
 
         for (int i = 0; i < args.Length; i++)
@@ -20,9 +20,16 @@ public static class ArgParser
                 continue;
             }
 
+            if (string.Equals(arg, "--autostart", StringComparison.OrdinalIgnoreCase))
+            {
+                autostart = true;
+                continue;
+            }
+
+            // Backwards compatibility
             if (string.Equals(arg, "--start", StringComparison.OrdinalIgnoreCase))
             {
-                start = true;
+                autostart = true;
                 continue;
             }
 
@@ -33,6 +40,6 @@ public static class ArgParser
             }
         }
 
-        return new StartupOptions(profile, start, tray);
+        return new StartupOptions(profile, autostart, tray);
     }
 }

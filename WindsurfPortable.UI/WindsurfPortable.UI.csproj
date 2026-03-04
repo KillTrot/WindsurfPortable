@@ -7,7 +7,7 @@
     <PublishTrimmed>true</PublishTrimmed>
     <AssemblyName>WindsurfPortable</AssemblyName>
     <PackageId>WindsurfPortable</PackageId>
-    <Version>0.1.1</Version>
+    <Version>0.1.2</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,6 +17,8 @@
 
   <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">
     <OutputType>WinExe</OutputType>
+    <ApplicationIcon>Assets\WindsurfPortable.ico</ApplicationIcon>
+    <Win32Icon>Assets\WindsurfPortable.ico</Win32Icon>
   </PropertyGroup>
 
   <ItemGroup>
