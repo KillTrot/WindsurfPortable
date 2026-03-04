@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="WindsurfPortable.Core\WindsurfPortable.Core.csproj" />
+  <Project Path="WindsurfPortable.UI\WindsurfPortable.UI.csproj" />
+</Solution>

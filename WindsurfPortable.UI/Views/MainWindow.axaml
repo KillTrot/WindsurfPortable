@@ -1,0 +1,85 @@
+<shad:Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:WindsurfPortable.UI.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:shad="clr-namespace:ShadUI;assembly=ShadUI"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        x:Class="WindsurfPortable.UI.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="Windsurf Portable Launcher"
+        TitleFontWeight="SemiBold"
+        Width="600" Height="400"
+        WindowStartupLocation="CenterScreen"
+        Background="Transparent"
+        ShowTitlebarBackground="False"
+        TransparencyLevelHint="Mica, AcrylicBlur, Blur">
+
+    <Design.DataContext>
+        <!-- This only sets the DataContext for the previewer in an IDE,
+             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
+        <vm:MainWindowViewModel/>
+    </Design.DataContext>
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="20" RowSpacing="14">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="0,0,0,6">
+            <StackPanel Grid.Column="0" Spacing="2">
+                <TextBlock Text="Windsurf Portable" FontSize="24" FontWeight="Bold" />
+                <TextBlock Text="Profile-isolated launcher" Classes="muted" FontSize="12" />
+            </StackPanel>
+            <Button Grid.Column="1" Content="Settings" Classes="Ghost" Click="OnOpenSettings" VerticalAlignment="Center" />
+        </Grid>
+
+        <Border Grid.Row="0" IsVisible="{Binding IsUpdateAvailable}" Classes="Card" Padding="14" Margin="0,48,0,0">
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10" VerticalAlignment="Center">
+                <TextBlock Grid.Column="0" Text="{Binding UpdateMessage}" VerticalAlignment="Center" FontWeight="SemiBold" />
+                <Button Grid.Column="1" Content="Update &amp; Restart" Command="{Binding ApplyUpdateCommand}" Classes="Primary" />
+                <Button Grid.Column="2" Content="Skip" Command="{Binding SkipUpdateCommand}" Classes="Secondary" />
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="1" IsVisible="{Binding IsWindsurfMissing}" Classes="Card" Padding="20">
+            <StackPanel Spacing="14" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="420">
+                <TextBlock Text="Windsurf installation not found" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" />
+                <TextBlock Text="Download an initial version to continue." TextWrapping="Wrap" HorizontalAlignment="Center" Classes="muted" />
+
+                <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                    <Button Content="Download Stable" Command="{Binding DownloadInitialCommand}" CommandParameter="stable" Classes="Primary" />
+                    <Button Content="Download Next" Command="{Binding DownloadInitialCommand}" CommandParameter="next" Classes="Secondary" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="1" IsVisible="{Binding !IsWindsurfMissing}" Classes="Card" Padding="20">
+            <StackPanel Spacing="12">
+                <TextBlock Text="Profile" FontWeight="SemiBold" />
+
+                <ComboBox ItemsSource="{Binding Profiles}"
+                          SelectedItem="{Binding SelectedProfile}"
+                          HorizontalAlignment="Stretch" />
+
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button Content="Create Profile" Command="{Binding CreateProfileCommand}" Classes="Secondary" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="12" Margin="0,4,0,0">
+            <TextBlock Grid.Column="0" Text="{Binding StatusMessage}"
+                       VerticalAlignment="Center" Classes="muted" TextWrapping="Wrap" />
+
+            <Button Grid.Column="1" Content="Launch" Command="{Binding LaunchCommand}" Classes="Primary" FontWeight="SemiBold" />
+        </Grid>
+
+        <Border Grid.RowSpan="3" IsVisible="{Binding IsBusy}" ZIndex="20" Background="{DynamicResource WindowBackgroundColor}" Opacity="0.95" Margin="-20">
+            <Border Classes="Card" HorizontalAlignment="Center" VerticalAlignment="Center" Width="320" Padding="24">
+                <StackPanel Spacing="16">
+                    <TextBlock Text="Working…" FontWeight="SemiBold" FontSize="18" />
+                    <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Classes="muted" />
+                    <ProgressBar IsIndeterminate="True" Classes="Primary" Height="4" Margin="0,8,0,0" />
+                </StackPanel>
+            </Border>
+        </Border>
+    </Grid>
+
+</shad:Window>
