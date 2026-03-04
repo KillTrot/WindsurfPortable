@@ -59,14 +59,6 @@ jobs:
         if: steps.version-guard.outputs.should_release == 'true'
         run: dotnet publish WindsurfPortable.UI/WindsurfPortable.UI.csproj -c Release -o publish -r win-x64 --self-contained true
 
-      - name: Publish (single-file self-contained)
-        if: steps.version-guard.outputs.should_release == 'true'
-        run: dotnet publish WindsurfPortable.UI/WindsurfPortable.UI.csproj -c Release -o publish-singlefile -r win-x64 --self-contained true /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true
-
-      - name: Publish (framework-dependent)
-        if: steps.version-guard.outputs.should_release == 'true'
-        run: dotnet publish WindsurfPortable.UI/WindsurfPortable.UI.csproj -c Release -o publish-framework -r win-x64 --self-contained false
-
       - name: Install Velopack Tool
         if: steps.version-guard.outputs.should_release == 'true'
         run: dotnet tool install -g vpk
@@ -88,19 +80,3 @@ jobs:
       - name: Upload GitHub Release
         if: steps.version-guard.outputs.should_release == 'true'
         run: vpk upload github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "WindsurfPortable ${{ steps.get-version.outputs.version }}" --tag v${{ steps.get-version.outputs.version }}
-
-      - name: Zip portable artifacts
-        if: steps.version-guard.outputs.should_release == 'true'
-        shell: pwsh
-        run: |
-          Compress-Archive -Path "publish-singlefile\*" -DestinationPath "WindsurfPortable-${{ steps.get-version.outputs.version }}-win-x64-singlefile-selfcontained.zip" -Force
-          Compress-Archive -Path "publish-framework\*" -DestinationPath "WindsurfPortable-${{ steps.get-version.outputs.version }}-win-x64-frameworkdependent.zip" -Force
-
-      - name: Upload portable artifacts to GitHub Release
-        if: steps.version-guard.outputs.should_release == 'true'
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "v${{ steps.get-version.outputs.version }}" "WindsurfPortable-${{ steps.get-version.outputs.version }}-win-x64-singlefile-selfcontained.zip" --clobber
-          gh release upload "v${{ steps.get-version.outputs.version }}" "WindsurfPortable-${{ steps.get-version.outputs.version }}-win-x64-frameworkdependent.zip" --clobber

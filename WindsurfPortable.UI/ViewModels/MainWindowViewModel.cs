@@ -26,6 +26,9 @@ public partial class MainWindowViewModel : ReactiveObject
 {
     private const string DefaultLauncherUpdateRepoUrl = "https://github.com/KillTrot/WindsurfPortable";
 
+    private const string WindsurfStableUpdateApiBase = "https://windsurf-stable.codeium.com/api/update/win32-x64-archive";
+    private const string WindsurfNextUpdateApiBase = "https://windsurf-next.codeium.com/api/update/win32-x64-archive";
+
     public ObservableCollection<string> Profiles { get; } = new();
 
     public ObservableCollection<string> AutoHideOptions { get; } = new() { "Immediately", "Once running", "Never" };
@@ -574,9 +577,13 @@ public partial class MainWindowViewModel : ReactiveObject
 
         try
         {
-            string apiUrl = channel == "next"
-                ? "https://windsurf-stable.codeium.com/api/update/win32-x64-archive/next/latest"
-                : "https://windsurf-stable.codeium.com/api/update/win32-x64-archive/stable/latest";
+            string updateApiBase = string.Equals(channel, "next", StringComparison.OrdinalIgnoreCase)
+                ? WindsurfNextUpdateApiBase
+                : WindsurfStableUpdateApiBase;
+
+            string apiUrl = string.Equals(channel, "next", StringComparison.OrdinalIgnoreCase)
+                ? $"{updateApiBase}/next/latest"
+                : $"{updateApiBase}/stable/latest";
 
             using var httpClient = new HttpClient();
             var response = await httpClient.GetFromJsonAsync(apiUrl, InternalUpdateResponseContext.Default.InternalUpdateResponse);
@@ -607,6 +614,7 @@ public partial class MainWindowViewModel : ReactiveObject
 
             StatusMessage = "Download complete!";
             IsWindsurfMissing = false;
+            SaveInstalledWindsurfChannel(channel);
             InitializeUpdateChecker();
         }
         catch (Exception ex)
@@ -623,8 +631,9 @@ public partial class MainWindowViewModel : ReactiveObject
     {
         string baseDir = AppContext.BaseDirectory;
         string appDir = Path.Combine(baseDir, "resources", "app");
-        bool isNextBuild = File.Exists(Path.Combine(baseDir, "Windsurf - Next.exe"));
         string patchStateFile = Path.Combine(baseDir, "resources", ".portable_patch_state.json");
+
+        bool isNextBuild = IsNextBuildFromStateOrApp(appDir, patchStateFile);
 
         _updateManager = new UpdateManager(baseDir, appDir, isNextBuild, patchStateFile);
         _updateManager.UpdateAvailable += (newVersion, extractPath) =>
@@ -639,6 +648,74 @@ public partial class MainWindowViewModel : ReactiveObject
         };
 
         System.Threading.Tasks.Task.Run(() => _updateManager.CheckForUpdatesAsync());
+    }
+
+    private static bool IsNextBuildFromStateOrApp(string appDir, string patchStateFile)
+    {
+        try
+        {
+            if (File.Exists(patchStateFile))
+            {
+                var stateStr = File.ReadAllText(patchStateFile);
+                var state = System.Text.Json.JsonSerializer.Deserialize(stateStr, JsonContext.Default.DictionaryStringString);
+                if (state != null && state.TryGetValue("windsurf_channel", out var channel) && !string.IsNullOrWhiteSpace(channel))
+                {
+                    return string.Equals(channel.Trim(), "next", StringComparison.OrdinalIgnoreCase);
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            string packageJsonPath = Path.Combine(appDir, "package.json");
+            if (File.Exists(packageJsonPath))
+            {
+                var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(packageJsonPath));
+                if (doc.RootElement.TryGetProperty("version", out var versionElement))
+                {
+                    var version = versionElement.GetString() ?? "";
+                    if (version.Contains("+next", StringComparison.OrdinalIgnoreCase) || version.Contains("-next", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+
+                if (doc.RootElement.TryGetProperty("name", out var nameElement))
+                {
+                    var name = nameElement.GetString() ?? "";
+                    if (name.Contains("next", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        return false;
+    }
+
+    private void SaveInstalledWindsurfChannel(string channel)
+    {
+        string patchStateFile = Path.Combine(AppContext.BaseDirectory, "resources", ".portable_patch_state.json");
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(patchStateFile)!);
+            System.Collections.Generic.Dictionary<string, string> state = new();
+            if (File.Exists(patchStateFile))
+            {
+                var stateStr = File.ReadAllText(patchStateFile);
+                state = System.Text.Json.JsonSerializer.Deserialize(stateStr, JsonContext.Default.DictionaryStringString) ?? new();
+            }
+
+            state["windsurf_channel"] = channel.Trim().ToLowerInvariant();
+            File.WriteAllText(patchStateFile, System.Text.Json.JsonSerializer.Serialize(state, JsonContext.Default.DictionaryStringString));
+        }
+        catch
+        {
+        }
     }
 
     private void LoadProfiles()

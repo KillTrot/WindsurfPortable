@@ -75,12 +75,13 @@
             <Button Grid.Column="1" Content="Launch" Command="{Binding LaunchCommand}" Classes="Primary" FontWeight="SemiBold" />
         </Grid>
 
-        <Border Grid.RowSpan="3" IsVisible="{Binding IsBusy}" ZIndex="20" Background="{DynamicResource WindowBackgroundColor}" Opacity="0.95" Margin="-20">
-            <Border Classes="Card" HorizontalAlignment="Center" VerticalAlignment="Center" Width="320" Padding="24">
-                <StackPanel Spacing="16">
-                    <TextBlock Text="Working…" FontWeight="SemiBold" FontSize="18" />
-                    <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Classes="muted" />
-                    <ProgressBar IsIndeterminate="True" Classes="Primary" Height="4" Margin="0,8,0,0" />
+        <Border Grid.RowSpan="3" IsVisible="{Binding IsBusy}" ZIndex="20" Background="Black" Opacity="0.35" Margin="-20">
+            <Border Classes="Card" HorizontalAlignment="Center" VerticalAlignment="Center" Width="360" Padding="20">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Working…" FontWeight="SemiBold" FontSize="16" />
+                    <Border Height="1" Background="{DynamicResource SystemControlForegroundChromeLowBrush}" />
+                    <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" FontSize="12" />
+                    <ProgressBar IsIndeterminate="True" Classes="Primary" Height="6" Margin="0,6,0,0" />
                 </StackPanel>
             </Border>
         </Border>

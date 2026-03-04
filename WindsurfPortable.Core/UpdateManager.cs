@@ -36,6 +36,9 @@ namespace WindsurfPortable
         private readonly string _updateUrl;
         private readonly string _stateFilePath;
 
+        private const string WindsurfStableUpdateApiBase = "https://windsurf-stable.codeium.com/api/update/win32-x64-archive";
+        private const string WindsurfNextUpdateApiBase = "https://windsurf-next.codeium.com/api/update/win32-x64-archive";
+
         public UpdateManager(string baseDir, string appDir, bool isNextBuild, string stateFilePath)
         {
             _baseDir = baseDir;
@@ -43,9 +46,10 @@ namespace WindsurfPortable
             _isNextBuild = isNextBuild;
             _stateFilePath = stateFilePath;
             
-            _updateUrl = isNextBuild 
-                ? "https://windsurf-stable.codeium.com/api/update/win32-x64-archive/next/latest"
-                : "https://windsurf-stable.codeium.com/api/update/win32-x64-archive/stable/latest";
+            string updateApiBase = isNextBuild ? WindsurfNextUpdateApiBase : WindsurfStableUpdateApiBase;
+            _updateUrl = isNextBuild
+                ? $"{updateApiBase}/next/latest"
+                : $"{updateApiBase}/stable/latest";
         }
 
         // UpdateResponse class moved out to fix source generator error
