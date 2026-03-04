@@ -9,6 +9,8 @@ using System.Reactive;
 using System.Text.Json.Serialization;
 using Avalonia.Threading;
 using ReactiveUI;
+using Velopack;
+using Velopack.Sources;
 using WindsurfPortable;
 
 namespace WindsurfPortable.UI.ViewModels;
@@ -21,6 +23,8 @@ internal partial class UpdateResponseContext : JsonSerializerContext { }
 
 public partial class MainWindowViewModel : ReactiveObject
 {
+    private const string DefaultLauncherUpdateRepoUrl = "https://github.com/KillTrot/WindsurfPortable";
+
     public ObservableCollection<string> Profiles { get; } = new();
 
     public ObservableCollection<string> AutoHideOptions { get; } = new() { "Immediately", "Once running", "Never" };
@@ -100,6 +104,31 @@ public partial class MainWindowViewModel : ReactiveObject
         set => this.RaiseAndSetIfChanged(ref _isUpdateAvailable, value);
     }
 
+    private bool _isLauncherUpdateAvailable;
+    public bool IsLauncherUpdateAvailable
+    {
+        get => _isLauncherUpdateAvailable;
+        set => this.RaiseAndSetIfChanged(ref _isLauncherUpdateAvailable, value);
+    }
+
+    private string _launcherUpdateMessage = "";
+    public string LauncherUpdateMessage
+    {
+        get => _launcherUpdateMessage;
+        set => this.RaiseAndSetIfChanged(ref _launcherUpdateMessage, value);
+    }
+
+    private string _launcherUpdateRepoUrl = "";
+    public string LauncherUpdateRepoUrl
+    {
+        get => _launcherUpdateRepoUrl;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _launcherUpdateRepoUrl, value);
+            SaveSettings();
+        }
+    }
+
     private string _updateMessage = "";
     public string UpdateMessage
     {
@@ -152,14 +181,23 @@ public partial class MainWindowViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> ApplyUpdateCommand { get; }
     public ReactiveCommand<Unit, Unit> SkipUpdateCommand { get; }
     public ReactiveCommand<string, Unit> DownloadInitialCommand { get; }
+    public ReactiveCommand<Unit, Unit> CheckLauncherUpdatesCommand { get; }
+    public ReactiveCommand<Unit, Unit> ApplyLauncherUpdateCommand { get; }
 
     private UpdateManager? _updateManager;
     private string _pendingExtractPath = "";
     private string _pendingNewVersion = "";
 
+    private Velopack.UpdateManager? _launcherUpdateManager;
+    private Velopack.UpdateInfo? _launcherUpdateInfo;
+
     public MainWindowViewModel()
     {
         LoadSettings();
+
+        if (string.IsNullOrWhiteSpace(LauncherUpdateRepoUrl))
+            LauncherUpdateRepoUrl = DefaultLauncherUpdateRepoUrl;
+
         CheckIfWindsurfMissing();
         LoadProfiles();
 
@@ -260,6 +298,16 @@ public partial class MainWindowViewModel : ReactiveObject
             await DownloadInitialWindsurfAsync(channel);
         });
 
+        CheckLauncherUpdatesCommand = ReactiveCommand.CreateFromTask(async () =>
+        {
+            await CheckForLauncherUpdatesAsync();
+        });
+
+        ApplyLauncherUpdateCommand = ReactiveCommand.CreateFromTask(async () =>
+        {
+            await ApplyLauncherUpdateAsync();
+        });
+
         if (!IsWindsurfMissing)
         {
             InitializeUpdateChecker();
@@ -283,6 +331,7 @@ public partial class MainWindowViewModel : ReactiveObject
                     if (state.TryGetValue("default_profile", out var dp) && !string.IsNullOrWhiteSpace(dp)) _defaultProfile = dp;
                     if (state.TryGetValue("auto_start_default_profile", out var asdp)) _autoStartDefaultProfile = asdp == "true";
                     if (state.TryGetValue("auto_hide_mode", out var ahm) && !string.IsNullOrWhiteSpace(ahm)) _autoHideMode = NormalizeAutoHideMode(ahm);
+                    if (state.TryGetValue("launcher_update_repo_url", out var repo) && !string.IsNullOrWhiteSpace(repo)) _launcherUpdateRepoUrl = repo;
                 }
             }
             catch { }
@@ -308,10 +357,87 @@ public partial class MainWindowViewModel : ReactiveObject
             state["default_profile"] = DefaultProfile;
             state["auto_start_default_profile"] = AutoStartDefaultProfile ? "true" : "false";
             state["auto_hide_mode"] = AutoHideMode;
+            state["launcher_update_repo_url"] = LauncherUpdateRepoUrl;
 
             File.WriteAllText(patchStateFile, System.Text.Json.JsonSerializer.Serialize(state, JsonContext.Default.DictionaryStringString));
         }
         catch { }
+    }
+
+    private Velopack.UpdateManager? CreateLauncherUpdateManager()
+    {
+        if (string.IsNullOrWhiteSpace(LauncherUpdateRepoUrl))
+            return null;
+
+        try
+        {
+            return new Velopack.UpdateManager(new GithubSource(LauncherUpdateRepoUrl.Trim(), string.Empty, prerelease: false));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async System.Threading.Tasks.Task CheckForLauncherUpdatesAsync()
+    {
+        IsLauncherUpdateAvailable = false;
+        _launcherUpdateInfo = null;
+
+        var mgr = CreateLauncherUpdateManager();
+        _launcherUpdateManager = mgr;
+
+        if (mgr == null)
+        {
+            LauncherUpdateMessage = "Set a GitHub repo URL to enable launcher updates.";
+            return;
+        }
+
+        if (!mgr.IsInstalled)
+        {
+            LauncherUpdateMessage = "Launcher updates are disabled unless installed via Velopack.";
+            return;
+        }
+
+        try
+        {
+            LauncherUpdateMessage = "Checking for launcher updates…";
+            var updateInfo = await mgr.CheckForUpdatesAsync();
+
+            if (updateInfo == null)
+            {
+                LauncherUpdateMessage = "Launcher is up to date.";
+                return;
+            }
+
+            _launcherUpdateInfo = updateInfo;
+            IsLauncherUpdateAvailable = true;
+            LauncherUpdateMessage = $"Launcher update available: {updateInfo.TargetFullRelease.Version}";
+        }
+        catch (Exception ex)
+        {
+            LauncherUpdateMessage = $"Launcher update check failed: {ex.Message}";
+        }
+    }
+
+    private async System.Threading.Tasks.Task ApplyLauncherUpdateAsync()
+    {
+        var mgr = _launcherUpdateManager;
+        var info = _launcherUpdateInfo;
+
+        if (mgr == null || info == null)
+            return;
+
+        try
+        {
+            LauncherUpdateMessage = "Downloading launcher update…";
+            await mgr.DownloadUpdatesAsync(info);
+            mgr.ApplyUpdatesAndRestart(info.TargetFullRelease);
+        }
+        catch (Exception ex)
+        {
+            LauncherUpdateMessage = $"Launcher update failed: {ex.Message}";
+        }
     }
 
     public void SetSelectedProfileToDefaultIfPossible()

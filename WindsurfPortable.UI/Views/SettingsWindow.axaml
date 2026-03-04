@@ -96,6 +96,29 @@
             </Grid>
           </StackPanel>
         </Border>
+
+        <TextBlock Text="Updates" FontWeight="SemiBold" FontSize="14" />
+        <Border Classes="Card" Padding="20">
+          <StackPanel>
+            <StackPanel Spacing="2">
+              <TextBlock Text="Launcher updates" FontWeight="SemiBold" />
+              <TextBlock Text="Uses GitHub Releases (Velopack)." TextWrapping="Wrap" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" FontSize="12" />
+            </StackPanel>
+
+            <TextBox Margin="0,12,0,0"
+                     Watermark="https://github.com/owner/repo"
+                     Text="{Binding LauncherUpdateRepoUrl}" />
+
+            <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,12,0,0">
+              <Button Content="Check" Command="{Binding CheckLauncherUpdatesCommand}" />
+              <Button Content="Apply &amp; Restart"
+                      Command="{Binding ApplyLauncherUpdateCommand}"
+                      IsEnabled="{Binding IsLauncherUpdateAvailable}" />
+            </StackPanel>
+
+            <TextBlock Margin="0,12,0,0" Text="{Binding LauncherUpdateMessage}" TextWrapping="Wrap" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+          </StackPanel>
+        </Border>
       </StackPanel>
     </ScrollViewer>
   </Grid>

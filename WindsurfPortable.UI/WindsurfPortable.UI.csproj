@@ -5,6 +5,9 @@
     <Nullable>enable</Nullable>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <PublishTrimmed>true</PublishTrimmed>
+    <AssemblyName>WindsurfPortable</AssemblyName>
+    <PackageId>WindsurfPortable</PackageId>
+    <Version>0.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
