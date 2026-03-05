@@ -793,18 +793,45 @@ public partial class MainWindowViewModel : ReactiveObject
 
     private async System.Threading.Tasks.Task ApplyLauncherUpdateAsync()
     {
-        var mgr = _launcherUpdateManager;
-        var info = _launcherUpdateInfo;
-
-        if (mgr == null || info == null)
+        var mgr = _launcherUpdateManager ?? CreateLauncherUpdateManager();
+        if (mgr == null || !mgr.IsInstalled)
             return;
 
         try
         {
+            var pending = mgr.UpdatePendingRestart;
+            if (pending != null)
+            {
+                StagePortableDataBackupForLauncherUpdate();
+                LauncherUpdateMessage = "Restarting launcher to apply update…";
+                mgr.ApplyUpdatesAndRestart(pending, Program.RestartArgs);
+                return;
+            }
+
+            var info = _launcherUpdateInfo ?? await mgr.CheckForUpdatesAsync();
+            if (info == null)
+            {
+                LauncherUpdateMessage = "Launcher is up to date.";
+                return;
+            }
+
+            _launcherUpdateInfo = info;
             LauncherUpdateMessage = "Downloading launcher update…";
             await mgr.DownloadUpdatesAsync(info);
+
+            pending = mgr.UpdatePendingRestart;
+            if (pending == null)
+            {
+                LauncherUpdateMessage = "Launcher update downloaded, but no pending restart update was found.";
+                return;
+            }
+
             IsLauncherRestartUpdateAvailable = true;
             LauncherRestartUpdateMessage = $"Launcher update available: {info.TargetFullRelease.Version} — restart to update";
+
+            StagePortableDataBackupForLauncherUpdate();
+            LauncherUpdateMessage = "Restarting launcher to apply update…";
+            mgr.ApplyUpdatesAndRestart(pending, Program.RestartArgs);
         }
         catch (Exception ex)
         {
@@ -822,6 +849,8 @@ public partial class MainWindowViewModel : ReactiveObject
         if (pending == null)
             return;
 
+        StagePortableDataBackupForLauncherUpdate();
+        LauncherUpdateMessage = "Restarting launcher to apply update…";
         mgr.ApplyUpdatesAndRestart(pending, Program.RestartArgs);
         await System.Threading.Tasks.Task.CompletedTask;
     }
@@ -839,6 +868,7 @@ public partial class MainWindowViewModel : ReactiveObject
                     var pending = mgr.UpdatePendingRestart;
                     if (pending != null)
                     {
+                        StagePortableDataBackupForLauncherUpdate();
                         mgr.ApplyUpdatesAndRestart(pending, Program.RestartArgs);
                         return;
                     }
@@ -1343,6 +1373,55 @@ public partial class MainWindowViewModel : ReactiveObject
         }
 
         return false;
+    }
+
+    private static string GetPortableUpdateBackupRootDirectory()
+        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WindsurfPortable", "launcher-update-backups");
+
+    private static string GetPortableUpdateBackupMarkerPath()
+        => Path.Combine(GetPortableUpdateBackupRootDirectory(), "pending-restore.txt");
+
+    private static void CopyDirectoryRecursive(string sourceDir, string destDir)
+    {
+        Directory.CreateDirectory(destDir);
+
+        foreach (var dir in Directory.EnumerateDirectories(sourceDir, "*", SearchOption.AllDirectories))
+        {
+            var rel = Path.GetRelativePath(sourceDir, dir);
+            Directory.CreateDirectory(Path.Combine(destDir, rel));
+        }
+
+        foreach (var file in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
+        {
+            var rel = Path.GetRelativePath(sourceDir, file);
+            var dest = Path.Combine(destDir, rel);
+            Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+            File.Copy(file, dest, overwrite: true);
+        }
+    }
+
+    private void StagePortableDataBackupForLauncherUpdate()
+    {
+        var baseDir = Path.GetFullPath(AppContext.BaseDirectory);
+        var backupRoot = GetPortableUpdateBackupRootDirectory();
+        Directory.CreateDirectory(backupRoot);
+
+        var backupDir = Path.Combine(backupRoot, DateTime.UtcNow.ToString("yyyyMMddHHmmssfff"));
+        Directory.CreateDirectory(backupDir);
+
+        var profilesDir = Path.Combine(baseDir, "profiles");
+        if (Directory.Exists(profilesDir))
+            CopyDirectoryRecursive(profilesDir, Path.Combine(backupDir, "profiles"));
+
+        var windsurfDir = Path.Combine(baseDir, "windsurf");
+        if (Directory.Exists(windsurfDir))
+            CopyDirectoryRecursive(windsurfDir, Path.Combine(backupDir, "windsurf"));
+
+        var settingsFile = Path.Combine(baseDir, "launcher_settings.json");
+        if (File.Exists(settingsFile))
+            File.Copy(settingsFile, Path.Combine(backupDir, "launcher_settings.json"), overwrite: true);
+
+        File.WriteAllLines(GetPortableUpdateBackupMarkerPath(), new[] { baseDir, backupDir });
     }
 
     private static string GetWindsurfUpdatePackageFileName(string downloadUrl, string safeVersion)
