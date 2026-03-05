@@ -344,10 +344,26 @@ jobs:
       - name: Create/Update GitHub Release assets
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
           tag="v${{ needs.version_guard.outputs.version }}"
           title="WindsurfPortable ${{ needs.version_guard.outputs.version }}"
+
+          required_dirs=(
+            "Releases/win-x64"
+            "Releases/win-arm64"
+            "Releases/osx-x64"
+            "Releases/osx-arm64"
+            "Releases/linux-x64"
+            "Releases/linux-x64-deb"
+          )
+
+          for dir in "${required_dirs[@]}"; do
+            if [ ! -d "$dir" ]; then
+              echo "Expected artifact directory missing: $dir"
+              exit 1
+            fi
+          done
 
           if ! gh release view "$tag" >/dev/null 2>&1; then
             gh release create "$tag" --title "$title" --notes ""
@@ -374,6 +390,16 @@ jobs:
               echo "Retrying upload for $file (attempt $((attempt + 1))/3)"
               sleep 5
             done
+          done
+
+          mapfile -t uploaded < <(gh release view "$tag" --json assets --jq '.assets[].name' | sort)
+
+          for file in "${files[@]}"; do
+            name="$(basename "$file")"
+            if ! printf '%s\n' "${uploaded[@]}" | grep -Fxq "$name"; then
+              echo "Uploaded release is missing expected asset: $name"
+              exit 1
+            fi
           done
 
           gh release edit "$tag" --title "$title" --latest

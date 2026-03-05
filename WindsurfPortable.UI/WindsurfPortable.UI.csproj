@@ -7,7 +7,7 @@
     <PublishTrimmed>true</PublishTrimmed>
     <AssemblyName>WindsurfPortable</AssemblyName>
     <PackageId>WindsurfPortable</PackageId>
-    <Version>0.1.11</Version>
+    <Version>0.1.12</Version>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(OS)' == 'Windows_NT' or '$(RuntimeIdentifier)' == 'win-x64' or '$(RuntimeIdentifier)' == 'win-arm64' or '$(RuntimeIdentifier)' == 'win-x86'">
