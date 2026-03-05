@@ -55,7 +55,9 @@
                           HorizontalAlignment="Stretch" />
 
                 <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding !IsForwardedInvocationMode}">
-                    <Button Content="Create Profile" Command="{Binding CreateProfileCommand}" Classes="Secondary" />
+                    <Button Content="Create Profile" Click="OnCreateProfile" Classes="Secondary" />
+                    <Button Content="Delete Profile" Click="OnDeleteProfile" Classes="Ghost"
+                            IsEnabled="{Binding CanDeleteSelectedProfile}" />
                 </StackPanel>
             </StackPanel>
         </Border>
@@ -85,7 +87,7 @@
 
                         <Button Command="{Binding ApplyUpdateCommand}"
                                 IsVisible="{Binding ShowWindsurfUpdateButtons}" Background="#FAFAFA" Foreground="#09090B" FontWeight="Medium" CornerRadius="6">
-                            <TextBlock Text="Update &amp; Restart" />
+                            <TextBlock Text="Install" />
                         </Button>
 
                         <Button Content="Skip" Command="{Binding SkipUpdateCommand}" Classes="Ghost"

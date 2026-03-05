@@ -1,11 +1,9 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
-using System.Formats.Tar;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -142,88 +140,10 @@ namespace WindsurfPortable
 
         public event Action<string, string>? UpdateAvailable;
 
-        private async Task HandleUpdateAvailableAsync(string downloadUrl, string newVersion, HttpClient httpClient, CancellationToken cancellationToken)
+        private Task HandleUpdateAvailableAsync(string downloadUrl, string newVersion, HttpClient httpClient, CancellationToken cancellationToken)
         {
-            string safeVersion = MakeSafePathSegment(newVersion);
-            string extractPath = Path.Combine(_baseDir, $"windsurf-update-ready-{safeVersion}");
-
-            if (Directory.Exists(extractPath))
-            {
-                UpdateAvailable?.Invoke(newVersion, extractPath);
-                return;
-            }
-
-            string tempPackagePath = Path.Combine(_baseDir, GetUpdatePackageFileName(downloadUrl, safeVersion));
-
-            // Download
-            var response = await httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-            response.EnsureSuccessStatusCode();
-
-            using (var fs = new FileStream(tempPackagePath, FileMode.Create, FileAccess.Write, FileShare.None))
-            {
-                await response.Content.CopyToAsync(fs, cancellationToken);
-            }
-
-            ExtractUpdatePackage(tempPackagePath, extractPath);
-
-            // Trigger UI Prompt via Event
-            UpdateAvailable?.Invoke(newVersion, extractPath);
-            
-            // Clean up downloaded package
-            try
-            {
-                File.Delete(tempPackagePath);
-            }
-            catch
-            {
-            }
-        }
-
-        private static string GetUpdatePackageFileName(string downloadUrl, string safeVersion)
-        {
-            try
-            {
-                var uri = new Uri(downloadUrl);
-                var name = Path.GetFileName(uri.LocalPath);
-                if (!string.IsNullOrWhiteSpace(name))
-                    return $"windsurf-update-{safeVersion}-{name}";
-            }
-            catch
-            {
-            }
-
-            return $"windsurf-update-{safeVersion}.pkg";
-        }
-
-        private static string MakeSafePathSegment(string value)
-        {
-            var invalid = Path.GetInvalidFileNameChars();
-            var chars = value.Trim().ToCharArray();
-            for (int i = 0; i < chars.Length; i++)
-            {
-                if (invalid.Contains(chars[i]))
-                    chars[i] = '_';
-            }
-            return new string(chars);
-        }
-
-        private static void ExtractUpdatePackage(string packagePath, string extractPath)
-        {
-            if (packagePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
-            {
-                ZipFile.ExtractToDirectory(packagePath, extractPath, overwriteFiles: true);
-                return;
-            }
-
-            if (packagePath.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) || packagePath.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase))
-            {
-                using var fs = File.OpenRead(packagePath);
-                using var gz = new GZipStream(fs, CompressionMode.Decompress);
-                TarFile.ExtractToDirectory(gz, extractPath, overwriteFiles: true);
-                return;
-            }
-
-            throw new NotSupportedException($"Unsupported Windsurf update package format: {packagePath}");
+            UpdateAvailable?.Invoke(newVersion, downloadUrl);
+            return Task.CompletedTask;
         }
 
         public void ApplyUpdateAndRestart(string extractPath, string baseDir)

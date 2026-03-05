@@ -129,8 +129,20 @@ public partial class MainWindowViewModel : ReactiveObject
     public string SelectedProfile
     {
         get => _selectedProfile;
-        set => this.RaiseAndSetIfChanged(ref _selectedProfile, value);
+        set
+        {
+            if (string.Equals(_selectedProfile, value, StringComparison.Ordinal))
+                return;
+
+            this.RaiseAndSetIfChanged(ref _selectedProfile, value);
+
+            this.RaisePropertyChanged(nameof(CanDeleteSelectedProfile));
+        }
     }
+
+    public bool CanDeleteSelectedProfile
+        => !string.IsNullOrWhiteSpace(SelectedProfile)
+           && !string.Equals(SelectedProfile, "default", StringComparison.OrdinalIgnoreCase);
 
     private string _statusMessage = "Ready";
     public string StatusMessage
@@ -153,7 +165,7 @@ public partial class MainWindowViewModel : ReactiveObject
         set => this.RaiseAndSetIfChanged(ref _isUpdateAvailable, value);
     }
 
-    public bool CanApplyWindsurfUpdate => IsUpdateAvailable && !IsWindsurfRunning && !string.IsNullOrEmpty(_pendingExtractPath);
+    public bool CanApplyWindsurfUpdate => IsUpdateAvailable && !string.IsNullOrEmpty(_pendingUpdateDownloadUrl);
     public bool IsUpdateAvailableAndWindsurfRunning => IsUpdateAvailable && IsWindsurfRunning;
 
     public bool IsUpdateOverlayVisible => IsLauncherRestartUpdateAvailable || IsUpdateAvailable;
@@ -284,7 +296,7 @@ public partial class MainWindowViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> DismissUpdateOverlayCommand { get; }
 
     private UpdateManager? _updateManager;
-    private string _pendingExtractPath = "";
+    private string _pendingUpdateDownloadUrl = "";
     private string _pendingNewVersion = "";
 
     private Velopack.UpdateManager? _launcherUpdateManager;
@@ -393,18 +405,14 @@ public partial class MainWindowViewModel : ReactiveObject
             }
         });
 
-        CreateProfileCommand = ReactiveCommand.Create(() =>
-        {
-            if (!Profiles.Contains("work"))
-            {
-                Profiles.Add("work");
-                SelectedProfile = "work";
-            }
-        });
+        CreateProfileCommand = ReactiveCommand.Create(() => { });
 
-        ApplyUpdateCommand = ReactiveCommand.Create(() =>
+        ApplyUpdateCommand = ReactiveCommand.CreateFromTask(async () =>
         {
-            if (IsWindsurfRunning)
+            if (string.IsNullOrWhiteSpace(_pendingUpdateDownloadUrl))
+                return;
+
+            if (IsLauncherManagedWindsurfProcessRunning())
             {
                 DialogManager
                     .CreateDialog("Close Windsurf", "Windsurf is currently running. Close it first, then click Update again.")
@@ -414,9 +422,18 @@ public partial class MainWindowViewModel : ReactiveObject
                 return;
             }
 
-            if (_updateManager != null && !string.IsNullOrEmpty(_pendingExtractPath))
+            IsBusy = true;
+            try
             {
-                _updateManager.ApplyUpdateAndRestart(_pendingExtractPath, AppContext.BaseDirectory);
+                await InstallPendingWindsurfUpdateAsync();
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Windsurf update failed: {ex.Message}";
+            }
+            finally
+            {
+                IsBusy = false;
             }
         });
 
@@ -465,7 +482,7 @@ public partial class MainWindowViewModel : ReactiveObject
             {
                 IsUpdateAvailable = false;
                 UpdateMessage = "";
-                _pendingExtractPath = "";
+                _pendingUpdateDownloadUrl = "";
                 _pendingNewVersion = "";
             }
 
@@ -483,7 +500,7 @@ public partial class MainWindowViewModel : ReactiveObject
             {
                 IsUpdateAvailable = false;
                 UpdateMessage = "";
-                _pendingExtractPath = "";
+                _pendingUpdateDownloadUrl = "";
                 _pendingNewVersion = "";
                 IsWindsurfRunning = false;
                 IsLauncherRestartUpdateAvailable = false;
@@ -494,7 +511,7 @@ public partial class MainWindowViewModel : ReactiveObject
                 IsUpdateAvailable = true;
                 UpdateMessage = "Update available: 0.0.0-debug";
                 _pendingNewVersion = "0.0.0-debug";
-                _pendingExtractPath = Path.Combine(AppContext.BaseDirectory, "windsurf-update-ready-0.0.0-debug");
+                _pendingUpdateDownloadUrl = "https://example.invalid/windsurf-update-0.0.0-debug.zip";
                 IsWindsurfRunning = false;
                 IsLauncherRestartUpdateAvailable = false;
                 LauncherRestartUpdateMessage = "";
@@ -504,7 +521,7 @@ public partial class MainWindowViewModel : ReactiveObject
                 IsUpdateAvailable = true;
                 UpdateMessage = "Update available: 0.0.0-debug";
                 _pendingNewVersion = "0.0.0-debug";
-                _pendingExtractPath = Path.Combine(AppContext.BaseDirectory, "windsurf-update-ready-0.0.0-debug");
+                _pendingUpdateDownloadUrl = "https://example.invalid/windsurf-update-0.0.0-debug.zip";
                 IsWindsurfRunning = true;
                 IsLauncherRestartUpdateAvailable = false;
                 LauncherRestartUpdateMessage = "";
@@ -513,7 +530,7 @@ public partial class MainWindowViewModel : ReactiveObject
             {
                 IsUpdateAvailable = false;
                 UpdateMessage = "";
-                _pendingExtractPath = "";
+                _pendingUpdateDownloadUrl = "";
                 _pendingNewVersion = "";
                 IsWindsurfRunning = false;
                 IsLauncherRestartUpdateAvailable = true;
@@ -524,7 +541,7 @@ public partial class MainWindowViewModel : ReactiveObject
                 IsUpdateAvailable = true;
                 UpdateMessage = "Update available: 0.0.0-debug";
                 _pendingNewVersion = "0.0.0-debug";
-                _pendingExtractPath = Path.Combine(AppContext.BaseDirectory, "windsurf-update-ready-0.0.0-debug");
+                _pendingUpdateDownloadUrl = "https://example.invalid/windsurf-update-0.0.0-debug.zip";
                 IsWindsurfRunning = false;
                 IsLauncherRestartUpdateAvailable = true;
                 LauncherRestartUpdateMessage = "Launcher update available: 0.0.0-debug — restart to update";
@@ -1056,12 +1073,12 @@ public partial class MainWindowViewModel : ReactiveObject
         bool isNextBuild = IsNextBuildFromStateOrApp(appDir, patchStateFile);
 
         _updateManager = new UpdateManager(baseDir, appDir, isNextBuild, patchStateFile);
-        _updateManager.UpdateAvailable += (newVersion, extractPath) =>
+        _updateManager.UpdateAvailable += (newVersion, downloadUrl) =>
         {
             Dispatcher.UIThread.InvokeAsync(() =>
             {
                 _pendingNewVersion = newVersion;
-                _pendingExtractPath = extractPath;
+                _pendingUpdateDownloadUrl = downloadUrl;
                 UpdateMessage = $"Update available: {newVersion}";
                 IsUpdateAvailable = true;
                 this.RaisePropertyChanged(nameof(CanApplyWindsurfUpdate));
@@ -1158,5 +1175,202 @@ public partial class MainWindowViewModel : ReactiveObject
                 }
             }
         }
+
+        this.RaisePropertyChanged(nameof(CanDeleteSelectedProfile));
+    }
+
+    public bool TryCreateProfile(string? profileName, out string error)
+    {
+        var name = (profileName ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            error = "Profile name is required.";
+            return false;
+        }
+
+        if (name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            error = "Profile name contains invalid file name characters.";
+            return false;
+        }
+
+        foreach (var existing in Profiles)
+        {
+            if (string.Equals(existing, name, StringComparison.OrdinalIgnoreCase))
+            {
+                error = "A profile with that name already exists.";
+                return false;
+            }
+        }
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "profiles", name));
+            LoadProfiles();
+            SelectedProfile = name;
+            error = string.Empty;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to create profile: {ex.Message}";
+            return false;
+        }
+    }
+
+    public bool TryDeleteSelectedProfile(out string error)
+    {
+        if (!CanDeleteSelectedProfile)
+        {
+            error = "Default profile cannot be deleted.";
+            return false;
+        }
+
+        var profile = SelectedProfile;
+        var profilePath = Path.Combine(AppContext.BaseDirectory, "profiles", profile);
+
+        try
+        {
+            if (Directory.Exists(profilePath))
+                Directory.Delete(profilePath, recursive: true);
+
+            LoadProfiles();
+            SetSelectedProfileToDefaultIfPossible();
+            if (!Profiles.Contains(SelectedProfile))
+                SelectedProfile = "default";
+
+            error = string.Empty;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to delete profile '{profile}': {ex.Message}";
+            return false;
+        }
+    }
+
+    private async System.Threading.Tasks.Task InstallPendingWindsurfUpdateAsync()
+    {
+        var downloadUrl = _pendingUpdateDownloadUrl;
+        var version = string.IsNullOrWhiteSpace(_pendingNewVersion) ? "unknown" : _pendingNewVersion;
+        if (string.IsNullOrWhiteSpace(downloadUrl))
+            return;
+
+        var safeVersion = MakeSafePathSegment(version);
+        var packagePath = Path.Combine(AppContext.BaseDirectory, GetWindsurfUpdatePackageFileName(downloadUrl, safeVersion));
+        var extractPath = Path.Combine(AppContext.BaseDirectory, $"windsurf-update-ready-{safeVersion}");
+        var targetWindsurfDir = Path.Combine(AppContext.BaseDirectory, "windsurf");
+
+        StatusMessage = $"Downloading Windsurf update {version}...";
+
+        using var httpClient = new HttpClient();
+        using var response = await httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
+        response.EnsureSuccessStatusCode();
+
+        var totalBytes = response.Content.Headers.ContentLength;
+        await using (var source = await response.Content.ReadAsStreamAsync())
+        await using (var destination = new FileStream(packagePath, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            var buffer = new byte[81920];
+            long readTotal = 0;
+            int read;
+            while ((read = await source.ReadAsync(buffer, 0, buffer.Length)) > 0)
+            {
+                await destination.WriteAsync(buffer, 0, read);
+                readTotal += read;
+
+                if (totalBytes.HasValue && totalBytes.Value > 0)
+                {
+                    var pct = (readTotal * 100.0) / totalBytes.Value;
+                    StatusMessage = $"Downloading Windsurf update {version}... {pct:0}%";
+                }
+            }
+        }
+
+        StatusMessage = $"Extracting Windsurf update {version}...";
+        if (Directory.Exists(extractPath))
+            Directory.Delete(extractPath, recursive: true);
+
+        await System.Threading.Tasks.Task.Run(() => ExtractInitialPackage(packagePath, extractPath));
+
+        StatusMessage = $"Installing Windsurf update {version}...";
+        await System.Threading.Tasks.Task.Run(() => UpdateApplier.ApplyExtractedUpdateToBaseDirectory(extractPath, targetWindsurfDir));
+
+        try
+        {
+            File.Delete(packagePath);
+        }
+        catch
+        {
+        }
+
+        IsUpdateAvailable = false;
+        _pendingUpdateDownloadUrl = "";
+        _pendingNewVersion = "";
+        UpdateMessage = "";
+        StatusMessage = $"Windsurf updated to {version}.";
+    }
+
+    private bool IsLauncherManagedWindsurfProcessRunning()
+    {
+        var managedRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "windsurf"));
+        var managedRootWithSeparator = managedRoot.EndsWith(Path.DirectorySeparatorChar)
+            ? managedRoot
+            : managedRoot + Path.DirectorySeparatorChar;
+
+        foreach (var process in Process.GetProcesses())
+        {
+            try
+            {
+                var processPath = process.MainModule?.FileName;
+                if (string.IsNullOrWhiteSpace(processPath))
+                    continue;
+
+                var fullProcessPath = Path.GetFullPath(processPath);
+                if (!fullProcessPath.StartsWith(managedRootWithSeparator, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (!process.HasExited)
+                    return true;
+            }
+            catch
+            {
+            }
+            finally
+            {
+                process.Dispose();
+            }
+        }
+
+        return false;
+    }
+
+    private static string GetWindsurfUpdatePackageFileName(string downloadUrl, string safeVersion)
+    {
+        try
+        {
+            var uri = new Uri(downloadUrl);
+            var name = Path.GetFileName(uri.LocalPath);
+            if (!string.IsNullOrWhiteSpace(name))
+                return $"windsurf-update-{safeVersion}-{name}";
+        }
+        catch
+        {
+        }
+
+        return $"windsurf-update-{safeVersion}.pkg";
+    }
+
+    private static string MakeSafePathSegment(string value)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var chars = value.Trim().ToCharArray();
+        for (int i = 0; i < chars.Length; i++)
+        {
+            if (invalid.Contains(chars[i]))
+                chars[i] = '_';
+        }
+
+        return new string(chars);
     }
 }

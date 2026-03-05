@@ -7,10 +7,10 @@
     <PublishTrimmed>true</PublishTrimmed>
     <AssemblyName>WindsurfPortable</AssemblyName>
     <PackageId>WindsurfPortable</PackageId>
-    <Version>0.1.10</Version>
+    <Version>0.1.11</Version>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">
+  <PropertyGroup Condition="'$(OS)' == 'Windows_NT' or '$(RuntimeIdentifier)' == 'win-x64' or '$(RuntimeIdentifier)' == 'win-arm64' or '$(RuntimeIdentifier)' == 'win-x86'">
     <OutputType>WinExe</OutputType>
     <ApplicationIcon>Assets\WindsurfPortable.ico</ApplicationIcon>
     <Win32Icon>Assets\WindsurfPortable.ico</Win32Icon>

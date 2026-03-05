@@ -316,20 +316,10 @@ jobs:
     needs: [version_guard, build_pack]
     if: needs.version_guard.outputs.should_release == 'true'
     runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 10.0.x
-
-      - name: Add dotnet tools to PATH
-        shell: bash
-        run: echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
-
-      - name: Install/Update vpk
-        shell: bash
-        run: dotnet tool update -g vpk
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -351,42 +341,39 @@ jobs:
             fi
           done
 
-      - name: Download Latest Release (for delta support)
-        continue-on-error: true
+      - name: Create/Update GitHub Release assets
         shell: bash
-        run: vpk download github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload GitHub Release (Velopack win-x64)
-        continue-on-error: true
-        shell: bash
-        run: vpk upload github --outputDir "Releases/win-x64" --channel "win-x64" --merge --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "WindsurfPortable ${{ needs.version_guard.outputs.version }}" --tag v${{ needs.version_guard.outputs.version }}
-
-      - name: Upload GitHub Release (Velopack win-arm64)
-        continue-on-error: true
-        shell: bash
-        run: vpk upload github --outputDir "Releases/win-arm64" --channel "win-arm64" --merge --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "WindsurfPortable ${{ needs.version_guard.outputs.version }}" --tag v${{ needs.version_guard.outputs.version }}
-
-      - name: Upload GitHub Release (Velopack osx-x64)
-        continue-on-error: true
-        shell: bash
-        run: vpk upload github --outputDir "Releases/osx-x64" --channel "osx-x64" --merge --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "WindsurfPortable ${{ needs.version_guard.outputs.version }}" --tag v${{ needs.version_guard.outputs.version }}
-
-      - name: Upload GitHub Release (Velopack osx-arm64)
-        continue-on-error: true
-        shell: bash
-        run: vpk upload github --outputDir "Releases/osx-arm64" --channel "osx-arm64" --merge --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "WindsurfPortable ${{ needs.version_guard.outputs.version }}" --tag v${{ needs.version_guard.outputs.version }}
-
-      - name: Upload GitHub Release (Velopack linux-x64)
-        continue-on-error: true
-        shell: bash
-        run: vpk upload github --outputDir "Releases/linux-x64" --channel "linux-x64" --merge --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "WindsurfPortable ${{ needs.version_guard.outputs.version }}" --tag v${{ needs.version_guard.outputs.version }}
-
-      - name: Upload Linux .deb to GitHub Release
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
-          if ls Releases/*.deb >/dev/null 2>&1; then
-            gh release upload "v${{ needs.version_guard.outputs.version }}" Releases/*.deb --clobber
+
+          tag="v${{ needs.version_guard.outputs.version }}"
+          title="WindsurfPortable ${{ needs.version_guard.outputs.version }}"
+
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "$title" --notes ""
           fi
+
+          mapfile -t files < <(find Releases -type f | sort)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No release files found under Releases/."
+            exit 1
+          fi
+
+          for file in "${files[@]}"; do
+            echo "Uploading $(basename "$file")"
+            for attempt in 1 2 3; do
+              if gh release upload "$tag" "$file" --clobber; then
+                break
+              fi
+
+              if [ "$attempt" -eq 3 ]; then
+                echo "Failed to upload $file after 3 attempts."
+                exit 1
+              fi
+
+              echo "Retrying upload for $file (attempt $((attempt + 1))/3)"
+              sleep 5
+            done
+          done
+
+          gh release edit "$tag" --title "$title" --latest
