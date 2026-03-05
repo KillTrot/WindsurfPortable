@@ -366,7 +366,14 @@ jobs:
           done
 
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --title "$title" --notes ""
+            gh release create "$tag" --title "$title" --notes "" --draft
+          else
+            is_draft="$(gh release view "$tag" --json isDraft --jq '.isDraft')"
+            if [ "$is_draft" != "true" ]; then
+              echo "Release $tag already exists as a published release and cannot be modified when immutable releases are enabled."
+              echo "Use a new version (recommended) or remove the existing release/tag manually."
+              exit 1
+            fi
           fi
 
           mapfile -t files < <(find Releases -type f | sort)
@@ -402,4 +409,4 @@ jobs:
             fi
           done
 
-          gh release edit "$tag" --title "$title" --latest
+          gh release edit "$tag" --title "$title" --latest --draft=false
