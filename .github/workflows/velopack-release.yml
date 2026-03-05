@@ -214,6 +214,7 @@ jobs:
               --packDir "publish/${{ matrix.rid }}" \
               --mainExe "${{ matrix.mainExe }}" \
               --runtime "${{ matrix.runtime }}" \
+              --channel "${{ matrix.rid }}" \
               --outputDir "Releases/${{ matrix.rid }}" \
               --packTitle "WindsurfPortable" \
               --packAuthors "KillTrot" \
@@ -228,6 +229,7 @@ jobs:
             --packDir "publish/${{ matrix.rid }}" \
             --mainExe "${{ matrix.mainExe }}" \
             --runtime "${{ matrix.runtime }}" \
+            --channel "${{ matrix.rid }}" \
             --outputDir "Releases/${{ matrix.rid }}" \
             --packTitle "WindsurfPortable" \
             --packAuthors "KillTrot" \
@@ -340,8 +342,13 @@ jobs:
           set -e
           mkdir -p Releases
 
-          find artifacts -type d -name Releases -print0 | while IFS= read -r -d '' d; do
-            rsync -a "$d/" Releases/
+          # download-artifact extracts each artifact into its own folder under ./artifacts.
+          # Because we upload with `path: Releases/`, the artifact root contains subfolders like
+          # win-x64/, osx-arm64/, etc (not a nested Releases/ folder).
+          for d in artifacts/*; do
+            if [ -d "$d" ]; then
+              rsync -a "$d/" Releases/
+            fi
           done
 
       - name: Download Latest Release (for delta support)
@@ -349,30 +356,30 @@ jobs:
         shell: bash
         run: vpk download github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload GitHub Release (Velopack Win x64)
+      - name: Upload GitHub Release (Velopack win-x64)
         continue-on-error: true
         shell: bash
-        run: cd Releases/win-x64 && vpk upload github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "WindsurfPortable ${{ needs.version_guard.outputs.version }}" --tag v${{ needs.version_guard.outputs.version }}
+        run: vpk upload github --outputDir "Releases/win-x64" --channel "win-x64" --merge --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "WindsurfPortable ${{ needs.version_guard.outputs.version }}" --tag v${{ needs.version_guard.outputs.version }}
 
-      - name: Upload GitHub Release (Velopack Win arm64)
+      - name: Upload GitHub Release (Velopack win-arm64)
         continue-on-error: true
         shell: bash
-        run: cd Releases/win-arm64 && vpk upload github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "WindsurfPortable ${{ needs.version_guard.outputs.version }}" --tag v${{ needs.version_guard.outputs.version }}
+        run: vpk upload github --outputDir "Releases/win-arm64" --channel "win-arm64" --merge --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "WindsurfPortable ${{ needs.version_guard.outputs.version }}" --tag v${{ needs.version_guard.outputs.version }}
 
-      - name: Upload GitHub Release (Velopack macOS x64)
+      - name: Upload GitHub Release (Velopack osx-x64)
         continue-on-error: true
         shell: bash
-        run: cd Releases/osx-x64 && vpk upload github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "WindsurfPortable ${{ needs.version_guard.outputs.version }}" --tag v${{ needs.version_guard.outputs.version }}
+        run: vpk upload github --outputDir "Releases/osx-x64" --channel "osx-x64" --merge --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "WindsurfPortable ${{ needs.version_guard.outputs.version }}" --tag v${{ needs.version_guard.outputs.version }}
 
-      - name: Upload GitHub Release (Velopack macOS arm64)
+      - name: Upload GitHub Release (Velopack osx-arm64)
         continue-on-error: true
         shell: bash
-        run: cd Releases/osx-arm64 && vpk upload github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "WindsurfPortable ${{ needs.version_guard.outputs.version }}" --tag v${{ needs.version_guard.outputs.version }}
+        run: vpk upload github --outputDir "Releases/osx-arm64" --channel "osx-arm64" --merge --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "WindsurfPortable ${{ needs.version_guard.outputs.version }}" --tag v${{ needs.version_guard.outputs.version }}
 
-      - name: Upload GitHub Release (Velopack Linux x64)
+      - name: Upload GitHub Release (Velopack linux-x64)
         continue-on-error: true
         shell: bash
-        run: cd Releases/linux-x64 && vpk upload github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "WindsurfPortable ${{ needs.version_guard.outputs.version }}" --tag v${{ needs.version_guard.outputs.version }}
+        run: vpk upload github --outputDir "Releases/linux-x64" --channel "linux-x64" --merge --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "WindsurfPortable ${{ needs.version_guard.outputs.version }}" --tag v${{ needs.version_guard.outputs.version }}
 
       - name: Upload Linux .deb to GitHub Release
         shell: bash
