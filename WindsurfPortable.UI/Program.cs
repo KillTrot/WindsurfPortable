@@ -9,7 +9,7 @@ namespace WindsurfPortable.UI;
 
 sealed class Program
 {
-    public static StartupOptions StartupOptions { get; private set; } = new(null, Autostart: false, Tray: false);
+    public static StartupOptions StartupOptions { get; private set; } = new(null, Autostart: false, Tray: false, ForwardArgs: Array.Empty<string>(), IsForwardedInvocation: false);
     public static string[] RestartArgs { get; private set; } = Array.Empty<string>();
     [STAThread]
     public static void Main(string[] args)

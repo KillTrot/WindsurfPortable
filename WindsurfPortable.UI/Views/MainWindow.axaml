@@ -30,7 +30,8 @@
                     <TextBlock Text="Profile-isolated launcher" Classes="muted" FontSize="12" />
                 </StackPanel>
             </Grid>
-            <Button Grid.Column="1" Content="Settings" Classes="Ghost" Click="OnOpenSettings" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Content="Settings" Classes="Ghost" Click="OnOpenSettings" VerticalAlignment="Center"
+                    IsVisible="{Binding !IsForwardedInvocationMode}" />
         </Grid>
 
         <Border Grid.Row="1" IsVisible="{Binding IsWindsurfMissing}" Classes="Card" Padding="20">
@@ -53,7 +54,7 @@
                           SelectedItem="{Binding SelectedProfile}"
                           HorizontalAlignment="Stretch" />
 
-                <StackPanel Orientation="Horizontal" Spacing="10">
+                <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding !IsForwardedInvocationMode}">
                     <Button Content="Create Profile" Command="{Binding CreateProfileCommand}" Classes="Secondary" />
                 </StackPanel>
             </StackPanel>
@@ -64,7 +65,8 @@
                        VerticalAlignment="Center" Classes="muted" TextWrapping="Wrap" />
 
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
-                <Button Content="Debug banners" Command="{Binding DebugCycleBannersCommand}" Classes="Secondary" IsVisible="{Binding IsDebugBuild}" />
+                <Button Content="Debug banners" Command="{Binding DebugCycleBannersCommand}" Classes="Secondary"
+                        IsVisible="{Binding ShowDebugBanners}" />
                 <Button Content="Launch" Command="{Binding LaunchCommand}" Classes="Primary" FontWeight="SemiBold" />
             </StackPanel>
         </Grid>

@@ -9,37 +9,41 @@ public static class ArgParser
         string? profile = null;
         bool autostart = false;
         bool tray = false;
+        var forwardArgs = new System.Collections.Generic.List<string>();
 
         for (int i = 0; i < args.Length; i++)
         {
             var arg = args[i];
-            if (string.Equals(arg, "--profile", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+
+            if (arg.StartsWith("--wp-profile=", StringComparison.OrdinalIgnoreCase))
+            {
+                profile = arg[13..];
+                continue;
+            }
+
+            if (string.Equals(arg, "--wp-profile", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
             {
                 profile = args[i + 1];
                 i++;
                 continue;
             }
 
-            if (string.Equals(arg, "--autostart", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(arg, "--wp-autostart", StringComparison.OrdinalIgnoreCase))
             {
                 autostart = true;
                 continue;
             }
 
-            // Backwards compatibility
-            if (string.Equals(arg, "--start", StringComparison.OrdinalIgnoreCase))
-            {
-                autostart = true;
-                continue;
-            }
-
-            if (string.Equals(arg, "--tray", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(arg, "--wp-tray", StringComparison.OrdinalIgnoreCase))
             {
                 tray = true;
                 continue;
             }
+
+            forwardArgs.Add(arg);
         }
 
-        return new StartupOptions(profile, autostart, tray);
+        var forwarded = forwardArgs.ToArray();
+        return new StartupOptions(profile, autostart, tray, forwarded, forwarded.Length > 0);
     }
 }

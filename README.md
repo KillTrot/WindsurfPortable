@@ -12,9 +12,9 @@ WindsurfPortable is a small Windows launcher for Windsurf that:
 
 ## Command line
 
-The UI launcher supports the following command-line switches:
+The UI launcher supports the following launcher-owned command-line switches:
 
-### `--profile <name>`
+### `--wp-profile <name>`
 
 Selects a profile name to use on startup.
 
@@ -24,39 +24,56 @@ Selects a profile name to use on startup.
 Examples:
 
 ```powershell
-WindsurfPortable.exe --profile default
-WindsurfPortable.exe --profile work
+WindsurfPortable.exe --wp-profile default
+WindsurfPortable.exe --wp-profile work
 ```
 
-### `--autostart`
+### `--wp-autostart`
 
 Starts Windsurf immediately after the launcher opens.
 
 Example:
 
 ```powershell
-WindsurfPortable.exe --autostart
-WindsurfPortable.exe --profile work --autostart
+WindsurfPortable.exe --wp-autostart
+WindsurfPortable.exe --wp-profile work --wp-autostart
 ```
 
-### `--tray`
+### `--wp-tray`
 
 Starts the launcher minimized to tray (if the system tray is available).
 
 Example:
 
 ```powershell
-WindsurfPortable.exe --tray
-WindsurfPortable.exe --profile work --autostart --tray
+WindsurfPortable.exe --wp-tray
+WindsurfPortable.exe --wp-profile work --wp-autostart --wp-tray
+```
+
+### Forwarding external args to Windsurf
+
+Any args that are **not** `--wp-*` launcher args are passed through to Windsurf.
+
+That includes:
+
+- file/folder paths,
+- editor flags like `--goto`,
+- protocol/file-handler payloads when Windows starts WindsurfPortable as the default handler.
+
+Examples:
+
+```powershell
+WindsurfPortable.exe C:\repo
+WindsurfPortable.exe --goto C:\repo\file.ts:12:4
 ```
 
 ## Starting a specific profile from a shortcut (no UI interaction)
 
-Use the `--profile` parameter together with `--autostart`.
+Use the `--wp-profile` parameter together with `--wp-autostart`.
 
-- **Profile selection**: `--profile <name>`
-- **Start Windsurf immediately**: `--autostart`
-- Optional: start minimized to tray: `--tray`
+- **Profile selection**: `--wp-profile <name>`
+- **Start Windsurf immediately**: `--wp-autostart`
+- Optional: start minimized to tray: `--wp-tray`
 
 ### Example (Windows shortcut)
 
@@ -64,13 +81,13 @@ Use the `--profile` parameter together with `--autostart`.
 2. For **Location**, use something like:
 
 ```text
-"C:\Path\To\WindsurfPortable.exe" --profile work --autostart
+"C:\Path\To\WindsurfPortable.exe" --wp-profile work --wp-autostart
 ```
 
 Optional tray startup:
 
 ```text
-"C:\Path\To\WindsurfPortable.exe" --profile work --autostart --tray
+"C:\Path\To\WindsurfPortable.exe" --wp-profile work --wp-autostart --wp-tray
 ```
 
 ## Profiles
@@ -86,12 +103,12 @@ Profiles are simple folders located next to the launcher:
 ### Creating a profile
 
 - Create a new folder under `profiles\<name>`.
-- Start the launcher with `--profile <name>`.
+- Start the launcher with `--wp-profile <name>`.
 
 ### Selecting a profile
 
 - You can choose it in the UI (profile dropdown), or
-- Pass `--profile <name>` on the command line.
+- Pass `--wp-profile <name>` on the command line.
 
 ### What a profile affects
 

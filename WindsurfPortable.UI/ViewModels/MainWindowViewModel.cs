@@ -44,6 +44,8 @@ public partial class MainWindowViewModel : ReactiveObject
         }
     }
 
+    public bool ShowDebugBanners => IsDebugBuild && !IsForwardedInvocationMode;
+
     public bool IsWindows => OperatingSystem.IsWindows();
 
     public ObservableCollection<string> Profiles { get; } = new();
@@ -73,6 +75,21 @@ public partial class MainWindowViewModel : ReactiveObject
     }
 
     public event EventHandler? HideToTrayRequested;
+
+    private string[] _pendingForwardArgs = Array.Empty<string>();
+
+    private bool _isForwardedInvocationMode;
+    public bool IsForwardedInvocationMode
+    {
+        get => _isForwardedInvocationMode;
+        private set
+        {
+            if (!this.RaiseAndSetIfChanged(ref _isForwardedInvocationMode, value))
+                return;
+
+            this.RaisePropertyChanged(nameof(ShowDebugBanners));
+        }
+    }
 
     private string _defaultProfile = "default";
     public string DefaultProfile
@@ -296,6 +313,7 @@ public partial class MainWindowViewModel : ReactiveObject
         {
             IsBusy = true;
             StatusMessage = $"Launching Windsurf ({SelectedProfile} profile)...";
+            var launchForwardArgs = ConsumePendingForwardArgs();
 
             if (ShouldAutoHideImmediately())
                 HideToTrayRequested?.Invoke(this, EventArgs.Empty);
@@ -309,7 +327,7 @@ public partial class MainWindowViewModel : ReactiveObject
                         AppContext.BaseDirectory,
                         null,
                         SelectedProfile,
-                        Array.Empty<string>(),
+                        launchForwardArgs,
                         EnableSingleInstancePatch,
                         EnableMcpSyncIsolation,
                         EnableGlobalRecentsPatch
@@ -866,17 +884,37 @@ public partial class MainWindowViewModel : ReactiveObject
             SelectedProfile = DefaultProfile;
     }
 
-    public void StartSelectedProfileInBackground()
+    public void ConfigureStartupInvocation(bool isForwardedInvocation, string[]? forwardArgs)
     {
+        IsForwardedInvocationMode = isForwardedInvocation;
+        _pendingForwardArgs = forwardArgs is { Length: > 0 }
+            ? (string[])forwardArgs.Clone()
+            : Array.Empty<string>();
+    }
+
+    public void StartSelectedProfileInBackground(string[]? forwardArgs = null)
+    {
+        if (forwardArgs != null)
+            _pendingForwardArgs = forwardArgs.Length > 0
+                ? (string[])forwardArgs.Clone()
+                : Array.Empty<string>();
+
         _ = LaunchCommand.Execute();
     }
 
-    public void StartDefaultProfileInBackground()
+    public void StartDefaultProfileInBackground(string[]? forwardArgs = null)
     {
         if (!string.IsNullOrWhiteSpace(DefaultProfile))
             SelectedProfile = DefaultProfile;
 
-        StartSelectedProfileInBackground();
+        StartSelectedProfileInBackground(forwardArgs);
+    }
+
+    private string[] ConsumePendingForwardArgs()
+    {
+        var args = _pendingForwardArgs;
+        _pendingForwardArgs = Array.Empty<string>();
+        return args;
     }
 
     private static string NormalizeAutoHideMode(string value)

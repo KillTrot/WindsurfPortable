@@ -32,6 +32,9 @@ public partial class App : Application
                 DataContext = vm,
             };
 
+            var startup = Program.StartupOptions;
+            vm.ConfigureStartupInvocation(startup.IsForwardedInvocation, startup.ForwardArgs);
+
             vm.StartBackgroundUpdateLoops();
 
             desktop.MainWindow = mainWindow;
@@ -75,13 +78,14 @@ public partial class App : Application
                 _tray = null;
             }
 
-            mainWindow.ConfigureCloseToTray(vm, Program.StartupOptions.Tray, trayAvailable: _tray != null);
+            var trayModeRequested = Program.StartupOptions.Tray || startup.IsForwardedInvocation;
+            mainWindow.ConfigureCloseToTray(vm, trayModeRequested, trayAvailable: _tray != null);
 
-            var startup = Program.StartupOptions;
             if (!string.IsNullOrWhiteSpace(startup.Profile))
                 vm.SelectedProfile = startup.Profile.Trim();
 
             var shouldStart = startup.Autostart || vm.AutoStartDefaultProfile;
+
             if (shouldStart)
             {
                 if (string.IsNullOrWhiteSpace(startup.Profile) && vm.AutoStartDefaultProfile)
@@ -90,7 +94,7 @@ public partial class App : Application
                 vm.StartSelectedProfileInBackground();
             }
 
-            if (startup.Tray && _tray != null)
+            if (trayModeRequested && _tray != null)
             {
                 if (shouldStart)
                 {
@@ -104,8 +108,30 @@ public partial class App : Application
                 }
                 else
                 {
-                    mainWindow.Hide();
+                    if (!startup.IsForwardedInvocation)
+                        mainWindow.Hide();
                 }
+            }
+
+            if (startup.IsForwardedInvocation)
+            {
+                var forwardedLaunchStarted = false;
+                vm.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName != nameof(MainWindowViewModel.IsWindsurfRunning))
+                        return;
+
+                    if (vm.IsWindsurfRunning)
+                    {
+                        forwardedLaunchStarted = true;
+                        if (_tray != null)
+                            mainWindow.Hide();
+                        return;
+                    }
+
+                    if (forwardedLaunchStarted)
+                        desktop.Shutdown();
+                };
             }
 
         }
