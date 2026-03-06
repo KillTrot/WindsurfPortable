@@ -306,8 +306,12 @@ public partial class MainWindowViewModel : ReactiveObject
 
     private int _debugBannerState;
 
+    private readonly string _launcherBaseDir = Path.GetFullPath(AppContext.BaseDirectory);
+    private readonly string _dataRootDir = PortableDataPaths.GetDataRoot(AppContext.BaseDirectory);
+
     public MainWindowViewModel()
     {
+        MigrateLegacyPortableDataIfNeeded();
         LoadSettings();
 
         if (string.IsNullOrWhiteSpace(LauncherUpdateRepoUrl))
@@ -336,7 +340,7 @@ public partial class MainWindowViewModel : ReactiveObject
                 await System.Threading.Tasks.Task.Run(() =>
                 {
                     var options = new Launcher.LauncherOptions(
-                        AppContext.BaseDirectory,
+                        _dataRootDir,
                         null,
                         SelectedProfile,
                         launchForwardArgs,
@@ -615,7 +619,7 @@ public partial class MainWindowViewModel : ReactiveObject
 
     private void LoadSettings()
     {
-        string settingsFile = Path.Combine(AppContext.BaseDirectory, "launcher_settings.json");
+        string settingsFile = Path.Combine(_dataRootDir, "launcher_settings.json");
         if (File.Exists(settingsFile))
         {
             try
@@ -644,7 +648,9 @@ public partial class MainWindowViewModel : ReactiveObject
         else
         {
             // Migrate from old patch state file if it exists
-            string oldSettingsFile = Path.Combine(AppContext.BaseDirectory, "windsurf", "resources", ".portable_patch_state.json");
+            string oldSettingsFile = Path.Combine(_dataRootDir, "windsurf", "resources", ".portable_patch_state.json");
+            if (!File.Exists(oldSettingsFile) && !string.Equals(_launcherBaseDir, _dataRootDir, StringComparison.OrdinalIgnoreCase))
+                oldSettingsFile = Path.Combine(_launcherBaseDir, "windsurf", "resources", ".portable_patch_state.json");
             if (File.Exists(oldSettingsFile))
             {
                 try
@@ -674,9 +680,50 @@ public partial class MainWindowViewModel : ReactiveObject
         }
     }
 
+    private void MigrateLegacyPortableDataIfNeeded()
+    {
+        if (string.Equals(_launcherBaseDir, _dataRootDir, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        try
+        {
+            Directory.CreateDirectory(_dataRootDir);
+
+            MoveDirectoryIfDestinationMissing("profiles");
+            MoveDirectoryIfDestinationMissing("windsurf");
+            MoveFileIfDestinationMissing("launcher_settings.json");
+        }
+        catch
+        {
+        }
+    }
+
+    private void MoveDirectoryIfDestinationMissing(string relativePath)
+    {
+        var source = Path.Combine(_launcherBaseDir, relativePath);
+        var destination = Path.Combine(_dataRootDir, relativePath);
+
+        if (!Directory.Exists(source) || Directory.Exists(destination))
+            return;
+
+        Directory.Move(source, destination);
+    }
+
+    private void MoveFileIfDestinationMissing(string relativePath)
+    {
+        var source = Path.Combine(_launcherBaseDir, relativePath);
+        var destination = Path.Combine(_dataRootDir, relativePath);
+
+        if (!File.Exists(source) || File.Exists(destination))
+            return;
+
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        File.Move(source, destination);
+    }
+
     private void SaveSettings()
     {
-        string settingsFile = Path.Combine(AppContext.BaseDirectory, "launcher_settings.json");
+        string settingsFile = Path.Combine(_dataRootDir, "launcher_settings.json");
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(settingsFile)!);
@@ -802,7 +849,6 @@ public partial class MainWindowViewModel : ReactiveObject
             var pending = mgr.UpdatePendingRestart;
             if (pending != null)
             {
-                StagePortableDataBackupForLauncherUpdate();
                 LauncherUpdateMessage = "Restarting launcher to apply update…";
                 mgr.ApplyUpdatesAndRestart(pending, Program.RestartArgs);
                 return;
@@ -829,7 +875,6 @@ public partial class MainWindowViewModel : ReactiveObject
             IsLauncherRestartUpdateAvailable = true;
             LauncherRestartUpdateMessage = $"Launcher update available: {info.TargetFullRelease.Version} — restart to update";
 
-            StagePortableDataBackupForLauncherUpdate();
             LauncherUpdateMessage = "Restarting launcher to apply update…";
             mgr.ApplyUpdatesAndRestart(pending, Program.RestartArgs);
         }
@@ -849,7 +894,6 @@ public partial class MainWindowViewModel : ReactiveObject
         if (pending == null)
             return;
 
-        StagePortableDataBackupForLauncherUpdate();
         LauncherUpdateMessage = "Restarting launcher to apply update…";
         mgr.ApplyUpdatesAndRestart(pending, Program.RestartArgs);
         await System.Threading.Tasks.Task.CompletedTask;
@@ -868,7 +912,6 @@ public partial class MainWindowViewModel : ReactiveObject
                     var pending = mgr.UpdatePendingRestart;
                     if (pending != null)
                     {
-                        StagePortableDataBackupForLauncherUpdate();
                         mgr.ApplyUpdatesAndRestart(pending, Program.RestartArgs);
                         return;
                     }
@@ -986,8 +1029,7 @@ public partial class MainWindowViewModel : ReactiveObject
 
     private void CheckIfWindsurfMissing()
     {
-        string baseDir = AppContext.BaseDirectory;
-        string windsurfDir = Path.Combine(baseDir, "windsurf");
+        string windsurfDir = Path.Combine(_dataRootDir, "windsurf");
         IsWindsurfMissing = !File.Exists(Path.Combine(windsurfDir, "Windsurf.exe")) &&
                             !File.Exists(Path.Combine(windsurfDir, "Windsurf - Next.exe"));
     }
@@ -1024,7 +1066,7 @@ public partial class MainWindowViewModel : ReactiveObject
             }
 
             StatusMessage = "Downloading Windsurf...";
-            string tempPackagePath = Path.Combine(AppContext.BaseDirectory, GetInitialPackageFileName(response.Url));
+            string tempPackagePath = Path.Combine(_dataRootDir, GetInitialPackageFileName(response.Url));
 
             var downloadResponse = await httpClient.GetAsync(response.Url, HttpCompletionOption.ResponseHeadersRead);
             downloadResponse.EnsureSuccessStatusCode();
@@ -1037,7 +1079,7 @@ public partial class MainWindowViewModel : ReactiveObject
             StatusMessage = "Extracting Windsurf...";
             await System.Threading.Tasks.Task.Run(() =>
             {
-                var windsurfDir = Path.Combine(AppContext.BaseDirectory, "windsurf");
+                var windsurfDir = Path.Combine(_dataRootDir, "windsurf");
                 Directory.CreateDirectory(windsurfDir);
                 ExtractInitialPackage(tempPackagePath, windsurfDir);
                 File.Delete(tempPackagePath);
@@ -1095,7 +1137,7 @@ public partial class MainWindowViewModel : ReactiveObject
 
     private void InitializeUpdateChecker()
     {
-        string baseDir = AppContext.BaseDirectory;
+        string baseDir = _dataRootDir;
         string windsurfDir = Path.Combine(baseDir, "windsurf");
         string appDir = Path.Combine(windsurfDir, "resources", "app");
         string patchStateFile = Path.Combine(windsurfDir, "resources", ".portable_patch_state.json");
@@ -1168,7 +1210,7 @@ public partial class MainWindowViewModel : ReactiveObject
 
     private void SaveInstalledWindsurfChannel(string channel)
     {
-        string patchStateFile = Path.Combine(AppContext.BaseDirectory, "windsurf", "resources", ".portable_patch_state.json");
+        string patchStateFile = Path.Combine(_dataRootDir, "windsurf", "resources", ".portable_patch_state.json");
 
         try
         {
@@ -1193,7 +1235,7 @@ public partial class MainWindowViewModel : ReactiveObject
         Profiles.Clear();
         Profiles.Add("default");
 
-        string profilesDir = Path.Combine(AppContext.BaseDirectory, "profiles");
+        string profilesDir = Path.Combine(_dataRootDir, "profiles");
         if (Directory.Exists(profilesDir))
         {
             foreach (var dir in Directory.GetDirectories(profilesDir))
@@ -1235,7 +1277,7 @@ public partial class MainWindowViewModel : ReactiveObject
 
         try
         {
-            Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "profiles", name));
+            Directory.CreateDirectory(Path.Combine(_dataRootDir, "profiles", name));
             LoadProfiles();
             SelectedProfile = name;
             error = string.Empty;
@@ -1257,7 +1299,7 @@ public partial class MainWindowViewModel : ReactiveObject
         }
 
         var profile = SelectedProfile;
-        var profilePath = Path.Combine(AppContext.BaseDirectory, "profiles", profile);
+        var profilePath = Path.Combine(_dataRootDir, "profiles", profile);
 
         try
         {
@@ -1287,9 +1329,9 @@ public partial class MainWindowViewModel : ReactiveObject
             return;
 
         var safeVersion = MakeSafePathSegment(version);
-        var packagePath = Path.Combine(AppContext.BaseDirectory, GetWindsurfUpdatePackageFileName(downloadUrl, safeVersion));
-        var extractPath = Path.Combine(AppContext.BaseDirectory, $"windsurf-update-ready-{safeVersion}");
-        var targetWindsurfDir = Path.Combine(AppContext.BaseDirectory, "windsurf");
+        var packagePath = Path.Combine(_dataRootDir, GetWindsurfUpdatePackageFileName(downloadUrl, safeVersion));
+        var extractPath = Path.Combine(_dataRootDir, $"windsurf-update-ready-{safeVersion}");
+        var targetWindsurfDir = Path.Combine(_dataRootDir, "windsurf");
 
         StatusMessage = $"Downloading Windsurf update {version}...";
 
@@ -1343,7 +1385,7 @@ public partial class MainWindowViewModel : ReactiveObject
 
     private bool IsLauncherManagedWindsurfProcessRunning()
     {
-        var managedRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "windsurf"));
+        var managedRoot = Path.GetFullPath(Path.Combine(_dataRootDir, "windsurf"));
         var managedRootWithSeparator = managedRoot.EndsWith(Path.DirectorySeparatorChar)
             ? managedRoot
             : managedRoot + Path.DirectorySeparatorChar;
@@ -1373,55 +1415,6 @@ public partial class MainWindowViewModel : ReactiveObject
         }
 
         return false;
-    }
-
-    private static string GetPortableUpdateBackupRootDirectory()
-        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WindsurfPortable", "launcher-update-backups");
-
-    private static string GetPortableUpdateBackupMarkerPath()
-        => Path.Combine(GetPortableUpdateBackupRootDirectory(), "pending-restore.txt");
-
-    private static void CopyDirectoryRecursive(string sourceDir, string destDir)
-    {
-        Directory.CreateDirectory(destDir);
-
-        foreach (var dir in Directory.EnumerateDirectories(sourceDir, "*", SearchOption.AllDirectories))
-        {
-            var rel = Path.GetRelativePath(sourceDir, dir);
-            Directory.CreateDirectory(Path.Combine(destDir, rel));
-        }
-
-        foreach (var file in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
-        {
-            var rel = Path.GetRelativePath(sourceDir, file);
-            var dest = Path.Combine(destDir, rel);
-            Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-            File.Copy(file, dest, overwrite: true);
-        }
-    }
-
-    private void StagePortableDataBackupForLauncherUpdate()
-    {
-        var baseDir = Path.GetFullPath(AppContext.BaseDirectory);
-        var backupRoot = GetPortableUpdateBackupRootDirectory();
-        Directory.CreateDirectory(backupRoot);
-
-        var backupDir = Path.Combine(backupRoot, DateTime.UtcNow.ToString("yyyyMMddHHmmssfff"));
-        Directory.CreateDirectory(backupDir);
-
-        var profilesDir = Path.Combine(baseDir, "profiles");
-        if (Directory.Exists(profilesDir))
-            CopyDirectoryRecursive(profilesDir, Path.Combine(backupDir, "profiles"));
-
-        var windsurfDir = Path.Combine(baseDir, "windsurf");
-        if (Directory.Exists(windsurfDir))
-            CopyDirectoryRecursive(windsurfDir, Path.Combine(backupDir, "windsurf"));
-
-        var settingsFile = Path.Combine(baseDir, "launcher_settings.json");
-        if (File.Exists(settingsFile))
-            File.Copy(settingsFile, Path.Combine(backupDir, "launcher_settings.json"), overwrite: true);
-
-        File.WriteAllLines(GetPortableUpdateBackupMarkerPath(), new[] { baseDir, backupDir });
     }
 
     private static string GetWindsurfUpdatePackageFileName(string downloadUrl, string safeVersion)

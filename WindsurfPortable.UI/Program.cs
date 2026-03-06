@@ -17,8 +17,6 @@ sealed class Program
         VelopackApp.Build()
             .Run();
 
-        TryRestorePortableDataAfterLauncherUpdate();
-
         RestartArgs = args;
 
         if (TryHandleApplyWindsurfUpdateMode(args))
@@ -26,88 +24,6 @@ sealed class Program
 
         StartupOptions = ArgParser.Parse(args);
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
-    }
-
-    private static void TryRestorePortableDataAfterLauncherUpdate()
-    {
-        try
-        {
-            var markerPath = Path.Combine(GetPortableUpdateBackupRootDirectory(), "pending-restore.txt");
-            if (!File.Exists(markerPath))
-                return;
-
-            var lines = File.ReadAllLines(markerPath);
-            if (lines.Length < 2)
-                return;
-
-            var targetBaseDir = Path.GetFullPath(lines[0]);
-            var backupDir = lines[1];
-            var currentBaseDir = Path.GetFullPath(AppContext.BaseDirectory);
-
-            if (!string.Equals(targetBaseDir, currentBaseDir, StringComparison.OrdinalIgnoreCase))
-                return;
-
-            if (!Directory.Exists(backupDir))
-                return;
-
-            RestoreDirectoryFromBackup(backupDir, currentBaseDir, "profiles");
-            RestoreDirectoryFromBackup(backupDir, currentBaseDir, "windsurf");
-
-            var backupSettingsFile = Path.Combine(backupDir, "launcher_settings.json");
-            if (File.Exists(backupSettingsFile))
-                File.Copy(backupSettingsFile, Path.Combine(currentBaseDir, "launcher_settings.json"), overwrite: true);
-
-            try
-            {
-                Directory.Delete(backupDir, recursive: true);
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                File.Delete(markerPath);
-            }
-            catch
-            {
-            }
-        }
-        catch
-        {
-        }
-    }
-
-    private static string GetPortableUpdateBackupRootDirectory()
-        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WindsurfPortable", "launcher-update-backups");
-
-    private static void RestoreDirectoryFromBackup(string backupDir, string currentBaseDir, string dirName)
-    {
-        var source = Path.Combine(backupDir, dirName);
-        if (!Directory.Exists(source))
-            return;
-
-        var destination = Path.Combine(currentBaseDir, dirName);
-        CopyDirectoryRecursive(source, destination);
-    }
-
-    private static void CopyDirectoryRecursive(string sourceDir, string destinationDir)
-    {
-        Directory.CreateDirectory(destinationDir);
-
-        foreach (var dir in Directory.EnumerateDirectories(sourceDir, "*", SearchOption.AllDirectories))
-        {
-            var rel = Path.GetRelativePath(sourceDir, dir);
-            Directory.CreateDirectory(Path.Combine(destinationDir, rel));
-        }
-
-        foreach (var file in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
-        {
-            var rel = Path.GetRelativePath(sourceDir, file);
-            var dest = Path.Combine(destinationDir, rel);
-            Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-            File.Copy(file, dest, overwrite: true);
-        }
     }
 
     private static bool TryHandleApplyWindsurfUpdateMode(string[] args)
@@ -128,9 +44,10 @@ sealed class Program
 
         try
         {
+            var dataRootDir = PortableDataPaths.GetDataRoot(AppContext.BaseDirectory);
             WindsurfPortable.UpdateApplier.ApplyExtractedUpdateToBaseDirectory(
                 extractPath,
-                Path.Combine(AppContext.BaseDirectory, "windsurf"));
+                Path.Combine(dataRootDir, "windsurf"));
 
             var currentExe = Environment.ProcessPath;
             if (!string.IsNullOrWhiteSpace(currentExe) && File.Exists(currentExe))
