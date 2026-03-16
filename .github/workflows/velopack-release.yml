@@ -50,8 +50,35 @@ jobs:
             echo "Latest tag version: $latest_ver; csproj version: $new_ver; will release."
           fi
 
-  build_pack:
+  prepare_release:
     needs: version_guard
+    if: needs.version_guard.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Create or validate draft release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="v${{ needs.version_guard.outputs.version }}"
+          title="WindsurfPortable ${{ needs.version_guard.outputs.version }}"
+
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "$title" --notes "" --draft
+            exit 0
+          fi
+
+          is_draft="$(gh release view "$tag" --json isDraft --jq '.isDraft')"
+          if [ "$is_draft" != "true" ]; then
+            echo "Release $tag already exists as a published release and cannot be modified when immutable releases are enabled."
+            echo "Use a new version (recommended) or remove the existing release/tag manually."
+            exit 1
+          fi
+
+  build_pack:
+    needs: [version_guard, prepare_release]
     if: needs.version_guard.outputs.should_release == 'true'
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
@@ -110,6 +137,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Compute release metadata
+        shell: bash
+        run: |
+          echo "RELEASE_TAG=v${{ needs.version_guard.outputs.version }}" >> "$GITHUB_ENV"
+          if [ "${{ matrix.linuxDeb }}" = "true" ]; then
+            echo "RELEASE_DIR=Releases/linux-x64-deb" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_DIR=Releases/${{ matrix.rid }}" >> "$GITHUB_ENV"
+          fi
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -306,86 +343,28 @@ jobs:
           mkdir -p Releases/linux-x64-deb
           dpkg-deb --build "$pkgdir" "Releases/linux-x64-deb/windsurfportable_${{ needs.version_guard.outputs.version }}_amd64.deb"
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: releases-${{ matrix.rid }}${{ matrix.linuxDeb && '-deb' || '' }}
-          path: Releases/
-
-  upload_release:
-    needs: [version_guard, build_pack]
-    if: needs.version_guard.outputs.should_release == 'true'
-    runs-on: ubuntu-latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Merge Releases
+      - name: Upload release assets
         shell: bash
-        run: |
-          set -e
-          mkdir -p Releases
-
-          # download-artifact extracts each artifact into its own folder under ./artifacts.
-          # Because we upload with `path: Releases/`, the artifact root contains subfolders like
-          # win-x64/, osx-arm64/, etc (not a nested Releases/ folder).
-          for d in artifacts/*; do
-            if [ -d "$d" ]; then
-              rsync -a "$d/" Releases/
-            fi
-          done
-
-      - name: Create/Update GitHub Release assets
-        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
 
-          tag="v${{ needs.version_guard.outputs.version }}"
-          title="WindsurfPortable ${{ needs.version_guard.outputs.version }}"
-
-          required_dirs=(
-            "Releases/win-x64"
-            "Releases/win-arm64"
-            "Releases/osx-x64"
-            "Releases/osx-arm64"
-            "Releases/linux-x64"
-            "Releases/linux-x64-deb"
-          )
-
-          for dir in "${required_dirs[@]}"; do
-            if [ ! -d "$dir" ]; then
-              echo "Expected artifact directory missing: $dir"
-              exit 1
-            fi
-          done
-
-          if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --title "$title" --notes "" --draft
-          else
-            is_draft="$(gh release view "$tag" --json isDraft --jq '.isDraft')"
-            if [ "$is_draft" != "true" ]; then
-              echo "Release $tag already exists as a published release and cannot be modified when immutable releases are enabled."
-              echo "Use a new version (recommended) or remove the existing release/tag manually."
-              exit 1
-            fi
+          if [ ! -d "$RELEASE_DIR" ]; then
+            echo "Expected release directory missing: $RELEASE_DIR"
+            exit 1
           fi
 
-          mapfile -t files < <(find Releases -type f | sort)
+          mapfile -t files < <(find "$RELEASE_DIR" -maxdepth 1 -type f | sort)
           if [ "${#files[@]}" -eq 0 ]; then
-            echo "No release files found under Releases/."
+            echo "No release files found under $RELEASE_DIR."
             exit 1
           fi
 
           for file in "${files[@]}"; do
-            echo "Uploading $(basename "$file")"
+            echo "Uploading $(basename "$file") from $RELEASE_DIR"
             for attempt in 1 2 3; do
-              if gh release upload "$tag" "$file" --clobber; then
+              if gh release upload "$RELEASE_TAG" "$file" --clobber; then
                 break
               fi
 
@@ -399,12 +378,39 @@ jobs:
             done
           done
 
+  publish_release:
+    needs: [version_guard, prepare_release, build_pack]
+    if: needs.version_guard.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Publish GitHub Release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="v${{ needs.version_guard.outputs.version }}"
+          title="WindsurfPortable ${{ needs.version_guard.outputs.version }}"
+
+          required_assets=(
+            "WindsurfPortable-Setup.exe"
+            "WindsurfPortable-Portable.zip"
+            "RELEASES"
+            "WindsurfPortable_arm64-Setup.exe"
+            "WindsurfPortable_arm64-Portable.zip"
+            "RELEASES-arm64"
+            "WindsurfPortable.AppImage"
+            "WindsurfPortable"
+            "windsurfportable_${{ needs.version_guard.outputs.version }}_amd64.deb"
+            "WindsurfPortable.pkg"
+          )
+
           mapfile -t uploaded < <(gh release view "$tag" --json assets --jq '.assets[].name' | sort)
 
-          for file in "${files[@]}"; do
-            name="$(basename "$file")"
-            if ! printf '%s\n' "${uploaded[@]}" | grep -Fxq "$name"; then
-              echo "Uploaded release is missing expected asset: $name"
+          for asset in "${required_assets[@]}"; do
+            if ! printf '%s\n' "${uploaded[@]}" | grep -Fxq "$asset"; then
+              echo "Uploaded release is missing expected asset: $asset"
               exit 1
             fi
           done
