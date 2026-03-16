@@ -397,16 +397,21 @@ jobs:
           title="WindsurfPortable ${{ needs.version_guard.outputs.version }}"
 
           required_assets=(
-            "WindsurfPortable-Setup.exe"
-            "WindsurfPortable-Portable.zip"
-            "RELEASES"
-            "WindsurfPortable_arm64-Setup.exe"
-            "WindsurfPortable_arm64-Portable.zip"
-            "RELEASES-arm64"
-            "WindsurfPortable.AppImage"
-            "WindsurfPortable"
+            "WindsurfPortable-win-x64-Setup.exe"
+            "WindsurfPortable-win-x64-Portable.zip"
+            "RELEASES-win-x64"
+            "WindsurfPortable-win-arm64-Setup.exe"
+            "WindsurfPortable-win-arm64-Portable.zip"
+            "RELEASES-win-arm64"
+            "WindsurfPortable-linux-x64.AppImage"
+            "RELEASES-linux-x64"
             "windsurfportable_${{ needs.version_guard.outputs.version }}_amd64.deb"
-            "WindsurfPortable.pkg"
+            "WindsurfPortable-osx-x64-Setup.pkg"
+            "WindsurfPortable-osx-x64-Portable.zip"
+            "RELEASES-osx-x64"
+            "WindsurfPortable-osx-arm64-Setup.pkg"
+            "WindsurfPortable-osx-arm64-Portable.zip"
+            "RELEASES-osx-arm64"
           )
 
           uploaded=()
