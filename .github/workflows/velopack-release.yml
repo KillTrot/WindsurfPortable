@@ -65,12 +65,12 @@ jobs:
           tag="v${{ needs.version_guard.outputs.version }}"
           title="WindsurfPortable ${{ needs.version_guard.outputs.version }}"
 
-          if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --title "$title" --notes "" --draft
+          if ! gh release view "$tag" -R "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release create "$tag" -R "${{ github.repository }}" --title "$title" --notes "" --draft
             exit 0
           fi
 
-          is_draft="$(gh release view "$tag" --json isDraft --jq '.isDraft')"
+          is_draft="$(gh release view "$tag" -R "${{ github.repository }}" --json isDraft --jq '.isDraft')"
           if [ "$is_draft" != "true" ]; then
             echo "Release $tag already exists as a published release and cannot be modified when immutable releases are enabled."
             echo "Use a new version (recommended) or remove the existing release/tag manually."
@@ -364,7 +364,7 @@ jobs:
           for file in "${files[@]}"; do
             echo "Uploading $(basename "$file") from $RELEASE_DIR"
             for attempt in 1 2 3; do
-              if gh release upload "$RELEASE_TAG" "$file" --clobber; then
+              if gh release upload "$RELEASE_TAG" "$file" -R "${{ github.repository }}" --clobber; then
                 break
               fi
 
@@ -406,7 +406,7 @@ jobs:
             "WindsurfPortable.pkg"
           )
 
-          mapfile -t uploaded < <(gh release view "$tag" --json assets --jq '.assets[].name' | sort)
+          mapfile -t uploaded < <(gh release view "$tag" -R "${{ github.repository }}" --json assets --jq '.assets[].name' | sort)
 
           for asset in "${required_assets[@]}"; do
             if ! printf '%s\n' "${uploaded[@]}" | grep -Fxq "$asset"; then
@@ -415,4 +415,4 @@ jobs:
             fi
           done
 
-          gh release edit "$tag" --title "$title" --latest --draft=false
+          gh release edit "$tag" -R "${{ github.repository }}" --title "$title" --latest --draft=false
